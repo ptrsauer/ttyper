@@ -90,8 +90,34 @@ pub fn save_results(history_file: &Path, language: &str, words: usize, results: 
     }
 }
 
+/// Format history data rows into displayable lines.
+/// `last` limits output to the most recent N entries. None means all.
+fn format_history_rows(data_lines: &[&str], last: Option<usize>) -> Vec<String> {
+    let skip = match last {
+        Some(n) if n < data_lines.len() => data_lines.len() - n,
+        _ => 0,
+    };
+
+    data_lines
+        .iter()
+        .skip(skip)
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            if fields.len() >= 9 {
+                Some(format!(
+                    "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
+                    fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]
+                ))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// Display history from CSV file in a formatted table.
-pub fn show_history(history_file: &Path) {
+/// `last` limits output to the most recent N entries. None means show all.
+pub fn show_history(history_file: &Path, last: Option<usize>) {
     if !history_file.exists() {
         println!("No history found at {}", history_file.display());
         return;
@@ -105,27 +131,32 @@ pub fn show_history(history_file: &Path) {
         return;
     }
 
+    let data_lines = &lines[1..];
+    let rows = format_history_rows(data_lines, last);
+    let shown = rows.len();
+    let total = data_lines.len();
+
     println!(
         "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
         "Date", "Language", "Words", "Raw WPM", "Adj WPM", "Acc %", "Worst Keys"
     );
     println!("{}", "-".repeat(90));
 
-    for line in lines.iter().skip(1) {
-        let fields: Vec<&str> = line.splitn(10, ',').collect();
-        if fields.len() >= 9 {
-            println!(
-                "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
-                fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]
-            );
-        }
+    for row in &rows {
+        println!("{}", row);
     }
 
-    println!(
-        "\n{} results total. History file: {}",
-        lines.len() - 1,
-        history_file.display()
-    );
+    if shown < total {
+        println!(
+            "\nShowing last {} of {} results. History file: {}",
+            shown, total, history_file.display()
+        );
+    } else {
+        println!(
+            "\n{} results total. History file: {}",
+            total, history_file.display()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -317,5 +348,49 @@ mod tests {
         assert_eq!(content.lines().count(), 3);
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // --- History display limiting ---
+
+    fn sample_csv_lines() -> Vec<&'static str> {
+        vec![
+            "2026-02-10 10:00:00,english,50,72.0,68.4,95.0,190,200,a:90%,",
+            "2026-02-11 10:00:00,english,50,75.0,71.2,95.0,190,200,,",
+            "2026-02-12 10:00:00,peter1000,50,78.0,74.1,95.0,380,400,y:50%,hello",
+            "2026-02-13 10:00:00,peter1000,50,80.0,76.0,95.0,380,400,,",
+            "2026-02-14 10:00:00,peter1000,50,82.0,77.9,95.0,380,400,,world",
+        ]
+    }
+
+    #[test]
+    fn test_last_limits_to_n_entries() {
+        let lines = sample_csv_lines();
+        let rows = format_history_rows(&lines, Some(2));
+        assert_eq!(rows.len(), 2);
+        // Should be the last 2 entries (Feb 13 and Feb 14)
+        assert!(rows[0].starts_with("2026-02-13"));
+        assert!(rows[1].starts_with("2026-02-14"));
+    }
+
+    #[test]
+    fn test_last_larger_than_total_shows_all() {
+        let lines = sample_csv_lines();
+        let rows = format_history_rows(&lines, Some(100));
+        assert_eq!(rows.len(), 5);
+        assert!(rows[0].starts_with("2026-02-10"));
+    }
+
+    #[test]
+    fn test_last_none_shows_all() {
+        let lines = sample_csv_lines();
+        let rows = format_history_rows(&lines, None);
+        assert_eq!(rows.len(), 5);
+    }
+
+    #[test]
+    fn test_last_zero_shows_nothing() {
+        let lines = sample_csv_lines();
+        let rows = format_history_rows(&lines, Some(0));
+        assert_eq!(rows.len(), 0);
     }
 }
