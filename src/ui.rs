@@ -290,13 +290,13 @@ impl ThemedWidget for &results::Results {
         let msg = match (self.slow_words.is_empty(), self.missed_words.is_empty()) {
             (true, true) => "Press 'q' to quit, 'r' for new test or 't' to repeat",
             (false, true) => {
-                "Press 'q' to quit, 'r' new, 't' repeat or 's' to practice slow words"
+                "Press 'q' to quit, 'r' new, 't' repeat or 's' to practice slow"
             }
             (true, false) => {
-                "Press 'q' to quit, 'r' new, 't' repeat or 'p' to practice missed words"
+                "Press 'q' to quit, 'r' new, 't' repeat or 'p' to practice missed"
             }
             (false, false) => {
-                "Press 'q' quit, 'r' new, 't' repeat, 's' slow words or 'p' missed words"
+                "Press 'q' quit, 'r' new, 't' repeat, 's' slow or 'p' missed"
             }
         };
 
