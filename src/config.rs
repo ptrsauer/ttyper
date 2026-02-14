@@ -6,11 +6,13 @@ use serde::{
     de::{self, IntoDeserializer},
     Deserialize,
 };
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub default_language: String,
+    pub history_file: Option<PathBuf>,
     pub theme: Theme,
 }
 
@@ -18,6 +20,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             default_language: "english200".into(),
+            history_file: None,
             theme: Theme::default(),
         }
     }
@@ -345,5 +348,29 @@ mod tests {
         assert_eq!(border_type("thick"), BorderType::Thick);
         assert_eq!(border_type("quadrantinside"), BorderType::QuadrantInside);
         assert_eq!(border_type("quadrantoutside"), BorderType::QuadrantOutside);
+    }
+
+    #[test]
+    fn config_default_has_no_history_file() {
+        let config = Config::default();
+        assert!(config.history_file.is_none());
+    }
+
+    #[test]
+    fn config_with_history_file() {
+        let toml_str = r#"history_file = "/custom/path/history.csv""#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.history_file,
+            Some(PathBuf::from("/custom/path/history.csv"))
+        );
+    }
+
+    #[test]
+    fn config_without_history_file() {
+        let toml_str = r#"default_language = "german""#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.history_file.is_none());
+        assert_eq!(config.default_language, "german");
     }
 }

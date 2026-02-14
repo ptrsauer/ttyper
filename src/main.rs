@@ -208,9 +208,11 @@ impl Opt {
         self.config_dir().join("language")
     }
 
-    /// History file path
+    /// History file path (configurable via config.toml, falls back to default)
     fn history_file(&self) -> PathBuf {
-        self.config_dir().join("history.csv")
+        self.config()
+            .history_file
+            .unwrap_or_else(|| self.config_dir().join("history.csv"))
     }
 
     /// Get the effective language name for history logging
