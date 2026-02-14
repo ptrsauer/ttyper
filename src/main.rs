@@ -360,6 +360,8 @@ fn main() -> io::Result<()> {
     }
 
     terminal::enable_raw_mode()?;
+    // Enable Release events for key dwell measurement (kitty keyboard protocol).
+    // Silently ignored on terminals that don't support it.
     let _ = execute!(
         io::stdout(),
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
