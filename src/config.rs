@@ -85,7 +85,6 @@ impl Default for Theme {
             default: Style::default(),
 
             title: Style::default()
-                .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
 
             input_border: Style::default().fg(Color::Cyan),
