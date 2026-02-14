@@ -14,7 +14,7 @@ fn unique_temp_dir(name: &str) -> std::path::PathBuf {
 #[test]
 fn nonexistent_file_exits_cleanly() {
     let output = Command::new(ttyper_bin())
-        .arg("/tmp/ttyper_nonexistent_file_xyz_42.txt")
+        .arg(std::env::temp_dir().join("ttyper_nonexistent_xyz_42.txt"))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -36,7 +36,7 @@ fn nonexistent_file_exits_cleanly() {
 
     // Should mention the file path in the error
     assert!(
-        stderr.contains("Cannot open"),
+        stderr.contains("Cannot read"),
         "Expected error about file not found, got: {}",
         stderr
     );
@@ -84,7 +84,7 @@ fn invalid_language_exits_cleanly() {
 fn nonexistent_language_file_exits_cleanly() {
     let output = Command::new(ttyper_bin())
         .arg("--language-file")
-        .arg("/tmp/ttyper_nonexistent_lang_xyz_42.txt")
+        .arg(std::env::temp_dir().join("ttyper_nonexistent_lang_xyz_42.txt"))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()
@@ -177,7 +177,7 @@ fn help_as_path_exits_cleanly() {
 
     // Should show an error about not being able to open the file
     assert!(
-        stderr.contains("Cannot open"),
+        stderr.contains("Cannot read"),
         "Expected file-not-found error for 'help', got: {}",
         stderr
     );

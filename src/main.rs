@@ -87,7 +87,7 @@ impl Opt {
                         .collect()
                 } else {
                     let file = fs::File::open(path).map_err(|e| {
-                        format!("Error: Cannot open '{}': {}", path.display(), e)
+                        format!("Error: Cannot read '{}': {}", path.display(), e)
                     })?;
                     io::BufReader::new(file)
                         .lines()
@@ -130,7 +130,14 @@ impl Opt {
 
                 let mut language: Vec<&str> = str::from_utf8(&bytes)
                     .map_err(|_| {
-                        "Error: Language file has invalid UTF-8 encoding.".to_string()
+                        if let Some(lang_file) = &self.language_file {
+                            format!(
+                                "Error: Language file '{}' has invalid UTF-8 encoding.",
+                                lang_file.display()
+                            )
+                        } else {
+                            format!("Error: Language '{}' has invalid UTF-8 encoding.", lang_name)
+                        }
                     })?
                     .lines()
                     .collect();
