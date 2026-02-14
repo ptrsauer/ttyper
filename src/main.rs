@@ -315,13 +315,16 @@ fn main() -> io::Result<()> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    state = State::Test(Test::new(
-                        opt.gen_contents().expect(
-                            "Couldn't get test contents. Make sure the specified language actually exists.",
-                        ),
-                        !opt.no_backtrack,
-                        opt.sudden_death
-                    ));
+                    match opt.gen_contents() {
+                        Some(contents) if !contents.is_empty() => {
+                            state = State::Test(Test::new(
+                                contents,
+                                !opt.no_backtrack,
+                                opt.sudden_death,
+                            ));
+                        }
+                        _ => continue,
+                    }
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('p'),
