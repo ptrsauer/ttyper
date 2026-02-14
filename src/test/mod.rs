@@ -135,7 +135,7 @@ impl Test {
                 });
                 word.progress.clear();
             }
-            KeyCode::Char(c) => {
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 word.progress.push(c);
                 let correct = word.text.starts_with(&word.progress[..]);
                 if self.sudden_death_enabled && !correct {
@@ -259,6 +259,58 @@ mod tests {
         assert_eq!(
             test.current_word, 1,
             "Ctrl+H should not backtrack when backtracking is disabled"
+        );
+    }
+
+    #[test]
+    fn ctrl_letter_is_ignored() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "he");
+        assert_eq!(test.words[0].progress, "he");
+
+        // Ctrl+A should not type 'a'
+        test.handle_key(press_ctrl(KeyCode::Char('a')));
+        assert_eq!(
+            test.words[0].progress, "he",
+            "Ctrl+A should not type a character"
+        );
+
+        // Ctrl+F should not type 'f'
+        test.handle_key(press_ctrl(KeyCode::Char('f')));
+        assert_eq!(
+            test.words[0].progress, "he",
+            "Ctrl+F should not type a character"
+        );
+    }
+
+    #[test]
+    fn ctrl_letter_no_event_added() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "he");
+        let events_before = test.words[0].events.len();
+
+        test.handle_key(press_ctrl(KeyCode::Char('g')));
+        assert_eq!(
+            test.words[0].events.len(),
+            events_before,
+            "Ctrl+G should not add a TestEvent"
+        );
+    }
+
+    #[test]
+    fn shift_letter_still_types() {
+        let mut test = Test::new(vec!["Hello".to_string()], true, false);
+
+        let shift_h = KeyEvent {
+            code: KeyCode::Char('H'),
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        };
+        test.handle_key(shift_h);
+        assert_eq!(
+            test.words[0].progress, "H",
+            "Shift+letter should still type the uppercase character"
         );
     }
 
