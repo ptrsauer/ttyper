@@ -9,7 +9,10 @@ use test::{results::Results, Test};
 use clap::Parser;
 use crossterm::{
     self, cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{
+        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute, terminal,
 };
 use rand::{seq::SliceRandom, thread_rng};
@@ -357,6 +360,10 @@ fn main() -> io::Result<()> {
     }
 
     terminal::enable_raw_mode()?;
+    let _ = execute!(
+        io::stdout(),
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
+    );
     execute!(
         io::stdout(),
         cursor::Hide,
@@ -512,6 +519,7 @@ fn main() -> io::Result<()> {
         state.render_into(&mut terminal, &config)?;
     }
 
+    let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
     terminal::disable_raw_mode()?;
     execute!(
         io::stdout(),
