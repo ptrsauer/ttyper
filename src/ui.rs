@@ -9,7 +9,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     symbols::Marker,
     text::{Line, Span, Text},
-    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Widget},
+    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Widget, Wrap},
 };
 use results::Fraction;
 
@@ -327,13 +327,15 @@ impl ThemedWidget for &results::Results {
             )),
             Line::from(format!("Correct Keypresses: {}", self.accuracy.overall)),
         ]);
-        let overview = Paragraph::new(overview_text).block(
-            Block::default()
-                .title(Span::styled("Overview", theme.title))
-                .borders(Borders::ALL)
-                .border_type(theme.border_type)
-                .border_style(theme.results_overview_border),
-        );
+        let overview = Paragraph::new(overview_text)
+            .block(
+                Block::default()
+                    .title(Span::styled("Overview", theme.title))
+                    .borders(Borders::ALL)
+                    .border_type(theme.border_type)
+                    .border_style(theme.results_overview_border),
+            )
+            .wrap(Wrap { trim: true });
         overview.render(info_chunks[0], buf);
 
         let mut worst_keys: Vec<(&KeyEvent, &Fraction)> = self
@@ -363,13 +365,15 @@ impl ThemedWidget for &results::Results {
                 .take(5)
                 .map(Line::from),
         );
-        let worst = Paragraph::new(worst_text).block(
-            Block::default()
-                .title(Span::styled("Worst Keys", theme.title))
-                .borders(Borders::ALL)
-                .border_type(theme.border_type)
-                .border_style(theme.results_worst_keys_border),
-        );
+        let worst = Paragraph::new(worst_text)
+            .block(
+                Block::default()
+                    .title(Span::styled("Worst Keys", theme.title))
+                    .borders(Borders::ALL)
+                    .border_type(theme.border_type)
+                    .border_style(theme.results_worst_keys_border),
+            )
+            .wrap(Wrap { trim: true });
         worst.render(info_chunks[1], buf);
 
         let mut next_chunk = 2;
@@ -381,13 +385,15 @@ impl ThemedWidget for &results::Results {
                     .take(5)
                     .map(|w| Line::from(format!("- {}", w))),
             );
-            let slow = Paragraph::new(slow_text).block(
-                Block::default()
-                    .title(Span::styled("Slow Words", theme.title))
-                    .borders(Borders::ALL)
-                    .border_type(theme.border_type)
-                    .border_style(theme.results_worst_keys_border),
-            );
+            let slow = Paragraph::new(slow_text)
+                .block(
+                    Block::default()
+                        .title(Span::styled("Slow Words", theme.title))
+                        .borders(Borders::ALL)
+                        .border_type(theme.border_type)
+                        .border_style(theme.results_worst_keys_border),
+                )
+                .wrap(Wrap { trim: true });
             slow.render(info_chunks[next_chunk], buf);
             next_chunk += 1;
         }
@@ -404,13 +410,15 @@ impl ThemedWidget for &results::Results {
             if let Some(avg) = self.dwell.overall_avg_ms {
                 dwell_text.extend([Line::from(format!("avg: {:.0}ms", avg))]);
             }
-            let dwell = Paragraph::new(dwell_text).block(
-                Block::default()
-                    .title(Span::styled("Key Hold", theme.title))
-                    .borders(Borders::ALL)
-                    .border_type(theme.border_type)
-                    .border_style(theme.results_worst_keys_border),
-            );
+            let dwell = Paragraph::new(dwell_text)
+                .block(
+                    Block::default()
+                        .title(Span::styled("Key Hold", theme.title))
+                        .borders(Borders::ALL)
+                        .border_type(theme.border_type)
+                        .border_style(theme.results_worst_keys_border),
+                )
+                .wrap(Wrap { trim: true });
             dwell.render(info_chunks[next_chunk], buf);
         }
 
