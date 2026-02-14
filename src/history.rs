@@ -90,34 +90,68 @@ pub fn save_results(history_file: &Path, language: &str, words: usize, results: 
     }
 }
 
+/// Filtering options for history display.
+pub struct Filters<'a> {
+    pub language: Option<&'a str>,
+    pub since: Option<&'a str>,
+    pub until: Option<&'a str>,
+}
+
+/// Check if a CSV line matches the given filters.
+/// Fields: datetime(0), language(1), ...
+fn matches_filters(fields: &[&str], filters: &Filters) -> bool {
+    if let Some(lang) = filters.language {
+        if fields.len() < 2 || fields[1] != lang {
+            return false;
+        }
+    }
+    if let Some(since) = filters.since {
+        if fields.is_empty() || &fields[0][..10] < since {
+            return false;
+        }
+    }
+    if let Some(until) = filters.until {
+        if fields.is_empty() || &fields[0][..10] > until {
+            return false;
+        }
+    }
+    true
+}
+
 /// Format history data rows into displayable lines.
-/// `last` limits output to the most recent N entries. None means all.
-fn format_history_rows(data_lines: &[&str], last: Option<usize>) -> Vec<String> {
+/// Applies filters first, then `last` limits output to the most recent N entries.
+fn format_history_rows(data_lines: &[&str], last: Option<usize>, filters: &Filters) -> Vec<String> {
+    let filtered: Vec<&str> = data_lines
+        .iter()
+        .filter(|line| {
+            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            fields.len() >= 9 && matches_filters(&fields, filters)
+        })
+        .copied()
+        .collect();
+
     let skip = match last {
-        Some(n) if n < data_lines.len() => data_lines.len() - n,
+        Some(n) if n < filtered.len() => filtered.len() - n,
         _ => 0,
     };
 
-    data_lines
+    filtered
         .iter()
         .skip(skip)
-        .filter_map(|line| {
+        .map(|line| {
             let fields: Vec<&str> = line.splitn(10, ',').collect();
-            if fields.len() >= 9 {
-                Some(format!(
-                    "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
-                    fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]
-                ))
-            } else {
-                None
-            }
+            format!(
+                "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
+                fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]
+            )
         })
         .collect()
 }
 
 /// Display history from CSV file in a formatted table.
 /// `last` limits output to the most recent N entries. None means show all.
-pub fn show_history(history_file: &Path, last: Option<usize>) {
+/// `filters` narrows results by language and/or date range.
+pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters) {
     if !history_file.exists() {
         println!("No history found at {}", history_file.display());
         return;
@@ -132,7 +166,7 @@ pub fn show_history(history_file: &Path, last: Option<usize>) {
     }
 
     let data_lines = &lines[1..];
-    let rows = format_history_rows(data_lines, last);
+    let rows = format_history_rows(data_lines, last, filters);
     let shown = rows.len();
     let total = data_lines.len();
 
@@ -146,9 +180,14 @@ pub fn show_history(history_file: &Path, last: Option<usize>) {
         println!("{}", row);
     }
 
-    if last.is_some() {
+    let has_filters = last.is_some()
+        || filters.language.is_some()
+        || filters.since.is_some()
+        || filters.until.is_some();
+
+    if has_filters {
         println!(
-            "\nShowing last {} of {} results. History file: {}",
+            "\nShowing {} of {} results. History file: {}",
             shown, total, history_file.display()
         );
     } else {
@@ -350,7 +389,13 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    // --- History display limiting ---
+    // --- History display limiting and filtering ---
+
+    const NO_FILTERS: Filters<'static> = Filters {
+        language: None,
+        since: None,
+        until: None,
+    };
 
     fn sample_csv_lines() -> Vec<&'static str> {
         vec![
@@ -365,9 +410,8 @@ mod tests {
     #[test]
     fn test_last_limits_to_n_entries() {
         let lines = sample_csv_lines();
-        let rows = format_history_rows(&lines, Some(2));
+        let rows = format_history_rows(&lines, Some(2), &NO_FILTERS);
         assert_eq!(rows.len(), 2);
-        // Should be the last 2 entries (Feb 13 and Feb 14)
         assert!(rows[0].starts_with("2026-02-13"));
         assert!(rows[1].starts_with("2026-02-14"));
     }
@@ -375,7 +419,7 @@ mod tests {
     #[test]
     fn test_last_larger_than_total_shows_all() {
         let lines = sample_csv_lines();
-        let rows = format_history_rows(&lines, Some(100));
+        let rows = format_history_rows(&lines, Some(100), &NO_FILTERS);
         assert_eq!(rows.len(), 5);
         assert!(rows[0].starts_with("2026-02-10"));
     }
@@ -383,14 +427,88 @@ mod tests {
     #[test]
     fn test_last_none_shows_all() {
         let lines = sample_csv_lines();
-        let rows = format_history_rows(&lines, None);
+        let rows = format_history_rows(&lines, None, &NO_FILTERS);
         assert_eq!(rows.len(), 5);
     }
 
     #[test]
     fn test_last_zero_shows_nothing() {
         let lines = sample_csv_lines();
-        let rows = format_history_rows(&lines, Some(0));
+        let rows = format_history_rows(&lines, Some(0), &NO_FILTERS);
         assert_eq!(rows.len(), 0);
+    }
+
+    // --- Language filtering ---
+
+    #[test]
+    fn test_filter_by_language() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].starts_with("2026-02-12"));
+        assert!(rows[2].starts_with("2026-02-14"));
+    }
+
+    #[test]
+    fn test_filter_by_language_no_match() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: Some("german"), since: None, until: None };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 0);
+    }
+
+    // --- Date filtering ---
+
+    #[test]
+    fn test_filter_since() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: None, since: Some("2026-02-13"), until: None };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].starts_with("2026-02-13"));
+        assert!(rows[1].starts_with("2026-02-14"));
+    }
+
+    #[test]
+    fn test_filter_until() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: None, since: None, until: Some("2026-02-11") };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].starts_with("2026-02-10"));
+        assert!(rows[1].starts_with("2026-02-11"));
+    }
+
+    #[test]
+    fn test_filter_date_range() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: None, since: Some("2026-02-11"), until: Some("2026-02-13") };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].starts_with("2026-02-11"));
+        assert!(rows[2].starts_with("2026-02-13"));
+    }
+
+    // --- Combined filters ---
+
+    #[test]
+    fn test_filter_language_and_date_range() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: Some("peter1000"), since: Some("2026-02-13"), until: None };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].starts_with("2026-02-13"));
+        assert!(rows[1].starts_with("2026-02-14"));
+    }
+
+    #[test]
+    fn test_filter_with_last() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        // 3 peter1000 entries, take last 1
+        let rows = format_history_rows(&lines, Some(1), &filters);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].starts_with("2026-02-14"));
     }
 }

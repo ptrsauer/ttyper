@@ -74,6 +74,18 @@ struct Opt {
     #[arg(long, value_name = "N")]
     last: Option<usize>,
 
+    /// Filter history by language
+    #[arg(long, value_name = "LANG")]
+    history_lang: Option<String>,
+
+    /// Filter history from date (YYYY-MM-DD)
+    #[arg(long, value_name = "DATE")]
+    since: Option<String>,
+
+    /// Filter history until date (YYYY-MM-DD)
+    #[arg(long, value_name = "DATE")]
+    until: Option<String>,
+
     /// Disable saving results to history
     #[arg(long)]
     no_save: bool,
@@ -270,13 +282,23 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
-    if opt.last.is_some() && !opt.history {
-        eprintln!("Error: --last requires --history flag");
+    let has_history_filters = opt.last.is_some()
+        || opt.history_lang.is_some()
+        || opt.since.is_some()
+        || opt.until.is_some();
+
+    if has_history_filters && !opt.history {
+        eprintln!("Error: --last, --history-lang, --since, and --until require --history flag");
         return Ok(());
     }
 
     if opt.history {
-        history::show_history(&opt.history_file(), opt.last);
+        let filters = history::Filters {
+            language: opt.history_lang.as_deref(),
+            since: opt.since.as_deref(),
+            until: opt.until.as_deref(),
+        };
+        history::show_history(&opt.history_file(), opt.last, &filters);
         return Ok(());
     }
 
