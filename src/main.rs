@@ -290,6 +290,18 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // When stdin is not a TTY (piped or redirected), it's at EOF after gen_contents().
+    // Crossterm reads keyboard events from stdin, so we must reattach it to
+    // the real terminal via /dev/tty before entering the event loop.
+    #[cfg(unix)]
+    if !std::io::IsTerminal::is_terminal(&io::stdin()) {
+        if let Err(e) = reattach_stdin() {
+            eprintln!("Error: Cannot open terminal for keyboard input: {}", e);
+            eprintln!("Piped input requires an available terminal (/dev/tty).");
+            return Ok(());
+        }
+    }
+
     terminal::enable_raw_mode()?;
     execute!(
         io::stdout(),
@@ -454,5 +466,18 @@ fn main() -> io::Result<()> {
         terminal::LeaveAlternateScreen,
     )?;
 
+    Ok(())
+}
+
+/// Reattach stdin to /dev/tty so crossterm can read keyboard events
+/// after stdin was consumed by a pipe.
+#[cfg(unix)]
+fn reattach_stdin() -> io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+    let tty = fs::File::open("/dev/tty")?;
+    let r = unsafe { libc::dup2(tty.as_raw_fd(), libc::STDIN_FILENO) };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
     Ok(())
 }
