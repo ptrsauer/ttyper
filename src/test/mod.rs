@@ -107,10 +107,21 @@ impl Test {
                     word.progress.pop();
                 }
             }
-            // CTRL-BackSpace and CTRL-W
-            KeyCode::Char('h') | KeyCode::Char('w')
-                if key.modifiers.contains(KeyModifiers::CONTROL) =>
-            {
+            // CTRL-H → delete single character (same as Backspace)
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if word.progress.is_empty() && self.backtracking_enabled {
+                    self.last_word();
+                } else {
+                    word.events.push(TestEvent {
+                        time: Instant::now(),
+                        correct: Some(!word.text.starts_with(&word.progress[..])),
+                        key,
+                    });
+                    word.progress.pop();
+                }
+            }
+            // CTRL-W and CTRL-Backspace → delete entire word
+            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.words[self.current_word].progress.is_empty() {
                     self.last_word();
                 }
@@ -167,5 +178,100 @@ impl Test {
         });
         self.current_word = 0;
         self.complete = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+
+    fn press(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        }
+    }
+
+    fn press_ctrl(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        }
+    }
+
+    fn type_string(test: &mut Test, s: &str) {
+        for c in s.chars() {
+            test.handle_key(press(KeyCode::Char(c)));
+        }
+    }
+
+    #[test]
+    fn ctrl_h_deletes_single_character() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "hel");
+        assert_eq!(test.words[0].progress, "hel");
+
+        test.handle_key(press_ctrl(KeyCode::Char('h')));
+        assert_eq!(
+            test.words[0].progress, "he",
+            "Ctrl+H should delete only one character, not the entire word"
+        );
+    }
+
+    #[test]
+    fn ctrl_h_on_empty_word_backtracks() {
+        let mut test = Test::new(
+            vec!["ab".to_string(), "cd".to_string()],
+            true, // backtracking enabled
+            false,
+        );
+        // Complete word 1, move to word 2
+        type_string(&mut test, "ab");
+        test.handle_key(press(KeyCode::Char(' ')));
+        assert_eq!(test.current_word, 1);
+
+        // Ctrl+H on empty word 2 → should go back to word 1
+        test.handle_key(press_ctrl(KeyCode::Char('h')));
+        assert_eq!(
+            test.current_word, 0,
+            "Ctrl+H on empty word should backtrack to previous word"
+        );
+    }
+
+    #[test]
+    fn ctrl_h_no_backtrack_when_disabled() {
+        let mut test = Test::new(
+            vec!["ab".to_string(), "cd".to_string()],
+            false, // backtracking disabled
+            false,
+        );
+        type_string(&mut test, "ab");
+        test.handle_key(press(KeyCode::Char(' ')));
+        assert_eq!(test.current_word, 1);
+
+        // Ctrl+H on empty word 2 with backtracking disabled → stay on word 2
+        test.handle_key(press_ctrl(KeyCode::Char('h')));
+        assert_eq!(
+            test.current_word, 1,
+            "Ctrl+H should not backtrack when backtracking is disabled"
+        );
+    }
+
+    #[test]
+    fn ctrl_w_still_clears_entire_word() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "hel");
+        assert_eq!(test.words[0].progress, "hel");
+
+        test.handle_key(press_ctrl(KeyCode::Char('w')));
+        assert_eq!(
+            test.words[0].progress, "",
+            "Ctrl+W should clear the entire word progress"
+        );
     }
 }
