@@ -17,7 +17,7 @@ use rust_embed::RustEmbed;
 use std::{
     ffi::OsString,
     fs,
-    io::{self, BufRead},
+    io::{self, BufRead, Write},
     num,
     path::PathBuf,
     str,
@@ -64,6 +64,14 @@ struct Opt {
     /// Enable sudden death mode to restart on first error
     #[arg(long)]
     sudden_death: bool,
+
+    /// Show history of past results
+    #[arg(long)]
+    history: bool,
+
+    /// Disable saving results to history
+    #[arg(long)]
+    no_save: bool,
 }
 
 impl Opt {
@@ -168,6 +176,18 @@ impl Opt {
     fn language_dir(&self) -> PathBuf {
         self.config_dir().join("language")
     }
+
+    /// History file path
+    fn history_file(&self) -> PathBuf {
+        self.config_dir().join("history.csv")
+    }
+
+    /// Get the effective language name for history logging
+    fn effective_language(&self) -> String {
+        self.language
+            .clone()
+            .unwrap_or_else(|| self.config().default_language)
+    }
 }
 
 enum State {
@@ -197,6 +217,95 @@ impl State {
     }
 }
 
+const WPM_PER_CPS: f64 = 12.0;
+
+fn save_results(opt: &Opt, results: &Results) {
+    let history_file = opt.history_file();
+    let is_new = !history_file.exists();
+
+    if let Ok(mut file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&history_file)
+    {
+        if is_new {
+            let _ = writeln!(file, "datetime,language,words,wpm_raw,wpm_adjusted,accuracy,correct,total,worst_keys,missed_words");
+        }
+
+        let raw_wpm = results.timing.overall_cps * WPM_PER_CPS;
+        let accuracy = f64::from(results.accuracy.overall);
+        let adjusted_wpm = raw_wpm * accuracy;
+
+        let mut worst_keys: Vec<_> = results
+            .accuracy
+            .per_key
+            .iter()
+            .filter(|(key, _)| matches!(key.code, KeyCode::Char(_)))
+            .map(|(key, frac)| {
+                let ch = if let KeyCode::Char(c) = key.code { c } else { '?' };
+                (ch, f64::from(*frac) * 100.0)
+            })
+            .filter(|(_, acc)| *acc < 100.0)
+            .collect();
+        worst_keys.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let worst_str: String = worst_keys
+            .iter()
+            .take(5)
+            .map(|(ch, acc)| format!("{}:{:.0}%", ch, acc))
+            .collect::<Vec<_>>()
+            .join(";");
+
+        let missed_str = results.missed_words.join(";");
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+
+        let _ = writeln!(
+            file,
+            "{},{},{},{:.1},{:.1},{:.1},{},{},{},{}",
+            now,
+            opt.effective_language(),
+            opt.words,
+            raw_wpm,
+            adjusted_wpm,
+            accuracy * 100.0,
+            results.accuracy.overall.numerator,
+            results.accuracy.overall.denominator,
+            worst_str,
+            missed_str,
+        );
+    }
+}
+
+fn show_history(opt: &Opt) {
+    let history_file = opt.history_file();
+    if !history_file.exists() {
+        println!("No history found at {}", history_file.display());
+        return;
+    }
+
+    let content = fs::read_to_string(&history_file).expect("Failed to read history file");
+    let lines: Vec<&str> = content.lines().collect();
+
+    if lines.len() <= 1 {
+        println!("No results recorded yet.");
+        return;
+    }
+
+    println!("{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
+        "Date", "Language", "Words", "Raw WPM", "Adj WPM", "Acc %", "Worst Keys");
+    println!("{}", "-".repeat(90));
+
+    for line in lines.iter().skip(1) {
+        let fields: Vec<&str> = line.splitn(10, ',').collect();
+        if fields.len() >= 9 {
+            println!("{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
+                fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]);
+        }
+    }
+
+    println!("\n{} results total. History file: {}", lines.len() - 1, history_file.display());
+}
+
 fn main() -> io::Result<()> {
     let opt = Opt::parse();
     if opt.debug {
@@ -213,6 +322,11 @@ fn main() -> io::Result<()> {
             .unwrap()
             .for_each(|name| println!("{}", name.to_str().expect("Ill-formatted language name.")));
 
+        return Ok(());
+    }
+
+    if opt.history {
+        show_history(&opt);
         return Ok(());
     }
 
@@ -252,7 +366,11 @@ fn main() -> io::Result<()> {
                 ..
             }) => match state {
                 State::Test(ref test) => {
-                    state = State::Results(Results::from(test));
+                    let results = Results::from(test);
+                    if !opt.no_save {
+                        save_results(&opt, &results);
+                    }
+                    state = State::Results(results);
                 }
                 State::Results(_) => break,
             },
@@ -264,7 +382,11 @@ fn main() -> io::Result<()> {
                 if let Event::Key(key) = event {
                     test.handle_key(key);
                     if test.complete {
-                        state = State::Results(Results::from(&*test));
+                        let results = Results::from(&*test);
+                        if !opt.no_save {
+                            save_results(&opt, &results);
+                        }
+                        state = State::Results(results);
                     }
                 }
             }
