@@ -1,19 +1,51 @@
-# ttyper
+# ttyper (fork)
 
-[![Crates.io](https://img.shields.io/crates/v/ttyper)](https://crates.io/crates/ttyper)
-[![GitHub Stars](https://img.shields.io/github/stars/max-niederman/ttyper)](https://github.com/max-niederman/ttyper)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/max-niederman/ttyper/rust.yml)](https://github.com/max-niederman/ttyper/actions)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/max-niederman/ttyper)
-[![Discord](https://img.shields.io/discord/1233267011963060275?logo=discord)](https://discord.gg/3wJyrBsKXu)
+[![Upstream](https://img.shields.io/badge/upstream-max--niederman%2Fttyper-blue)](https://github.com/max-niederman/ttyper)
 [![License](https://img.shields.io/crates/l/ttyper)](./LICENSE.md)
 
-ttyper is a terminal-based typing test built with Rust and Ratatui.
+This is an actively maintained fork of [max-niederman/ttyper](https://github.com/max-niederman/ttyper), a terminal-based typing test built with Rust and Ratatui.
 
 ![Recording](./resources/recording.gif)
 
-## chat
+## Fork Changes
 
-If you're interested in contributing to ttyper, need help with an issue, or just want to hang out, you should join [the development Discord server](https://discord.gg/3wJyrBsKXu).
+This fork adds the following features on top of upstream ttyper 1.6.0:
+
+- **History tracking**: Results are automatically saved to a CSV file after each test (`--no-save` to disable, `--history` to view past results)
+- **Bug fixes**: Addressing open upstream issues (see [issues](https://github.com/ptrsauer/ttyper/issues))
+
+### History
+
+Every completed test appends a row to `TTYPER_CONFIG_DIR/history.csv` with:
+
+| Field | Description |
+|-------|-------------|
+| `datetime` | Timestamp of the test |
+| `language` | Language/word list used |
+| `words` | Number of words in the test |
+| `wpm_raw` | Raw words per minute |
+| `wpm_adjusted` | WPM adjusted for errors |
+| `accuracy` | Overall accuracy percentage |
+| `correct` | Number of correct keystrokes |
+| `total` | Total keystrokes |
+| `worst_keys` | Up to 5 worst keys with accuracy (e.g. `y:50%;A:75%`) |
+| `missed_words` | Words with errors |
+
+```bash
+# View history
+ttyper --history
+
+# Run without saving
+ttyper --no-save
+```
+
+## Upstream
+
+The original project by [Max Niederman](https://github.com/max-niederman) can be found at [max-niederman/ttyper](https://github.com/max-niederman/ttyper). This fork aims to contribute fixes back upstream where possible.
+
+## Chat
+
+If you're interested in the original ttyper project, you can join [the development Discord server](https://discord.gg/3wJyrBsKXu).
 
 ## installation
 
