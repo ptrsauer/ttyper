@@ -17,6 +17,9 @@ crossterm = "^0.27"
 rust-embed = "^8.2"
 toml = "^0.8"
 
+[target.'cfg(unix)'.dependencies]
+libc = "^0.2"
+
 [dependencies.ratatui]
 version = "^0.25"
 
