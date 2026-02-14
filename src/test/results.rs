@@ -55,9 +55,16 @@ pub struct AccuracyData {
     pub per_key: HashMap<KeyEvent, Fraction>,
 }
 
+pub struct DwellData {
+    pub per_key: Vec<(char, f64)>,
+    pub overall_avg_ms: Option<f64>,
+    pub has_data: bool,
+}
+
 pub struct Results {
     pub timing: TimingData,
     pub accuracy: AccuracyData,
+    pub dwell: DwellData,
     pub missed_words: Vec<String>,
     pub slow_words: Vec<String>,
     pub words: Vec<String>,
@@ -78,6 +85,7 @@ impl From<&Test> for Results {
         Self {
             timing: calc_timing(&events),
             accuracy: calc_accuracy(&events, &target_chars),
+            dwell: calc_dwell(&events),
             missed_words: calc_missed_words(test),
             slow_words: calc_slow_words(test),
             words: test.words.iter().map(|w| w.text.clone()).collect(),
@@ -201,6 +209,42 @@ fn calc_slow_words(test: &Test) -> Vec<String> {
         .collect()
 }
 
+/// Calculate keystroke dwelling (key-hold) time statistics.
+/// Only includes events where a Release event was captured (auto-detect).
+fn calc_dwell(events: &[&super::TestEvent]) -> DwellData {
+    let mut key_dwells: HashMap<char, Vec<f64>> = HashMap::new();
+    let mut all_dwells: Vec<f64> = Vec::new();
+
+    for event in events {
+        if let (Some(release_time), KeyCode::Char(c)) = (event.release_time, event.key.code) {
+            if let Some(dwell) = release_time.checked_duration_since(event.time) {
+                let dwell_ms = dwell.as_secs_f64() * 1000.0;
+                key_dwells.entry(c).or_default().push(dwell_ms);
+                all_dwells.push(dwell_ms);
+            }
+        }
+    }
+
+    let has_data = !all_dwells.is_empty();
+    let overall_avg_ms = if has_data {
+        Some(all_dwells.iter().sum::<f64>() / all_dwells.len() as f64)
+    } else {
+        None
+    };
+
+    let mut per_key: Vec<(char, f64)> = key_dwells
+        .into_iter()
+        .map(|(c, dwells)| (c, dwells.iter().sum::<f64>() / dwells.len() as f64))
+        .collect();
+    per_key.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    DwellData {
+        per_key,
+        overall_avg_ms,
+        has_data,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +256,7 @@ mod tests {
             time: Instant::now(),
             key: KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
             correct: Some(correct),
+            release_time: None,
         }
     }
 
@@ -310,6 +355,21 @@ mod tests {
             time,
             key: KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
             correct: Some(correct),
+            release_time: None,
+        }
+    }
+
+    fn make_dwell_event(
+        c: char,
+        correct: bool,
+        time: Instant,
+        release_time: Instant,
+    ) -> super::super::TestEvent {
+        super::super::TestEvent {
+            time,
+            key: KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            correct: Some(correct),
+            release_time: Some(release_time),
         }
     }
 
@@ -447,5 +507,91 @@ mod tests {
         );
         assert_eq!(results.words[1], "apple");
         assert_eq!(results.words[2], "mango");
+    }
+
+    // --- Dwell time ---
+
+    #[test]
+    fn dwell_no_release_events() {
+        let mut test = Test::new(vec!["abc".to_string()], true, false);
+        test.words[0].events.push(make_event('a', true));
+        test.words[0].events.push(make_event('b', true));
+        test.words[0].events.push(make_event('c', true));
+
+        let results = Results::from(&test);
+        assert!(!results.dwell.has_data, "No release events → has_data should be false");
+        assert!(results.dwell.overall_avg_ms.is_none());
+        assert!(results.dwell.per_key.is_empty());
+    }
+
+    #[test]
+    fn dwell_with_release_events() {
+        let now = Instant::now();
+        let mut test = Test::new(vec!["ab".to_string()], true, false);
+
+        // 'a' held for 80ms, 'b' held for 120ms
+        test.words[0].events.push(make_dwell_event(
+            'a', true, now, now + std::time::Duration::from_millis(80),
+        ));
+        test.words[0].events.push(make_dwell_event(
+            'b', true, now + std::time::Duration::from_millis(100),
+            now + std::time::Duration::from_millis(220),
+        ));
+
+        let results = Results::from(&test);
+        assert!(results.dwell.has_data);
+        // avg = (80 + 120) / 2 = 100ms
+        let avg = results.dwell.overall_avg_ms.unwrap();
+        assert!((avg - 100.0).abs() < 1.0, "Expected ~100ms, got {}", avg);
+        // 'b' should be first (longer dwell)
+        assert_eq!(results.dwell.per_key[0].0, 'b');
+        assert_eq!(results.dwell.per_key[1].0, 'a');
+    }
+
+    #[test]
+    fn dwell_mixed_events() {
+        let now = Instant::now();
+        let mut test = Test::new(vec!["abc".to_string()], true, false);
+
+        // 'a' has release (100ms), 'b' does not, 'c' has release (50ms)
+        test.words[0].events.push(make_dwell_event(
+            'a', true, now, now + std::time::Duration::from_millis(100),
+        ));
+        test.words[0].events.push(make_timed_event(
+            'b', true, now + std::time::Duration::from_millis(150),
+        ));
+        test.words[0].events.push(make_dwell_event(
+            'c', true, now + std::time::Duration::from_millis(200),
+            now + std::time::Duration::from_millis(250),
+        ));
+
+        let results = Results::from(&test);
+        assert!(results.dwell.has_data);
+        // Only 'a' and 'c' have dwell data
+        assert_eq!(results.dwell.per_key.len(), 2);
+        // avg = (100 + 50) / 2 = 75ms
+        let avg = results.dwell.overall_avg_ms.unwrap();
+        assert!((avg - 75.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn dwell_per_key_averages() {
+        let now = Instant::now();
+        let mut test = Test::new(vec!["aa".to_string()], true, false);
+
+        // Two presses of 'a': 60ms and 100ms → avg 80ms
+        test.words[0].events.push(make_dwell_event(
+            'a', true, now, now + std::time::Duration::from_millis(60),
+        ));
+        test.words[0].events.push(make_dwell_event(
+            'a', true, now + std::time::Duration::from_millis(100),
+            now + std::time::Duration::from_millis(200),
+        ));
+
+        let results = Results::from(&test);
+        assert_eq!(results.dwell.per_key.len(), 1);
+        let (ch, avg_ms) = results.dwell.per_key[0];
+        assert_eq!(ch, 'a');
+        assert!((avg_ms - 80.0).abs() < 1.0, "Expected ~80ms, got {}", avg_ms);
     }
 }

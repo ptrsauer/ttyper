@@ -863,6 +863,7 @@ dependencies = [
  "clap",
  "crossterm",
  "dirs",
+ "libc",
  "rand",
  "ratatui",
  "rust-embed",

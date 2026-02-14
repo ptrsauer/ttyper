@@ -1,6 +1,7 @@
 pub mod results;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use std::collections::HashMap;
 use std::fmt;
 use std::time::Instant;
 
@@ -8,6 +9,7 @@ pub struct TestEvent {
     pub time: Instant,
     pub key: KeyEvent,
     pub correct: Option<bool>,
+    pub release_time: Option<Instant>,
 }
 
 pub fn is_missed_word_event(event: &TestEvent) -> bool {
@@ -53,6 +55,7 @@ pub struct Test {
     pub complete: bool,
     pub backtracking_enabled: bool,
     pub sudden_death_enabled: bool,
+    pending_presses: HashMap<KeyCode, (usize, usize)>,
 }
 
 impl Test {
@@ -63,13 +66,21 @@ impl Test {
             complete: false,
             backtracking_enabled,
             sudden_death_enabled,
+            pending_presses: HashMap::new(),
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        if key.kind == KeyEventKind::Release {
+            self.record_release(key.code);
+            return;
+        }
         if key.kind != KeyEventKind::Press {
             return;
         }
+
+        let word_idx = self.current_word;
+        let events_before = self.words[word_idx].events.len();
 
         let word = &mut self.words[self.current_word];
         match key.code {
@@ -82,6 +93,7 @@ impl Test {
                         time: Instant::now(),
                         correct: Some(true),
                         key,
+                        release_time: None,
                     })
                 } else if !word.progress.is_empty() || word.text.is_empty() {
                     let correct = word.text == word.progress;
@@ -92,6 +104,7 @@ impl Test {
                             time: Instant::now(),
                             correct: Some(correct),
                             key,
+                            release_time: None,
                         });
                         self.next_word();
                     }
@@ -105,6 +118,7 @@ impl Test {
                         time: Instant::now(),
                         correct: Some(!word.text.starts_with(&word.progress[..])),
                         key,
+                        release_time: None,
                     });
                     word.progress.pop();
                 }
@@ -118,6 +132,7 @@ impl Test {
                         time: Instant::now(),
                         correct: Some(!word.text.starts_with(&word.progress[..])),
                         key,
+                        release_time: None,
                     });
                     word.progress.pop();
                 }
@@ -134,6 +149,7 @@ impl Test {
                     time: Instant::now(),
                     correct: None,
                     key,
+                    release_time: None,
                 });
                 word.progress.clear();
             }
@@ -147,6 +163,7 @@ impl Test {
                         time: Instant::now(),
                         correct: Some(correct),
                         key,
+                        release_time: None,
                     });
                     if word.progress == word.text && self.current_word == self.words.len() - 1 {
                         self.complete = true;
@@ -156,6 +173,22 @@ impl Test {
             }
             _ => {}
         };
+
+        // Track pending press for dwell time measurement (after match borrow is dropped)
+        if self.words.get(word_idx).map_or(false, |w| w.events.len() > events_before) {
+            self.pending_presses
+                .insert(key.code, (word_idx, self.words[word_idx].events.len() - 1));
+        }
+    }
+
+    fn record_release(&mut self, code: KeyCode) {
+        if let Some((word_idx, event_idx)) = self.pending_presses.remove(&code) {
+            if let Some(word) = self.words.get_mut(word_idx) {
+                if let Some(event) = word.events.get_mut(event_idx) {
+                    event.release_time = Some(Instant::now());
+                }
+            }
+        }
     }
 
     fn last_word(&mut self) {
@@ -180,6 +213,7 @@ impl Test {
         });
         self.current_word = 0;
         self.complete = false;
+        self.pending_presses.clear();
     }
 }
 

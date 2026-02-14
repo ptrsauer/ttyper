@@ -283,13 +283,15 @@ impl ThemedWidget for &results::Results {
             .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)])
             .split(chunks[0]);
         let has_slow_words = !self.slow_words.is_empty();
+        let has_dwell = self.dwell.has_data;
+        let panel_count = 2 + has_slow_words as u32 + has_dwell as u32;
         let info_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints(if has_slow_words {
-                vec![Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]
-            } else {
-                vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]
-            })
+            .constraints(
+                (0..panel_count)
+                    .map(|_| Constraint::Ratio(1, panel_count))
+                    .collect::<Vec<_>>(),
+            )
             .split(res_chunks[0]);
 
         let msg = match (self.slow_words.is_empty(), self.missed_words.is_empty()) {
@@ -370,6 +372,7 @@ impl ThemedWidget for &results::Results {
         );
         worst.render(info_chunks[1], buf);
 
+        let mut next_chunk = 2;
         if has_slow_words {
             let mut slow_text = Text::styled("", theme.results_worst_keys);
             slow_text.extend(
@@ -385,7 +388,30 @@ impl ThemedWidget for &results::Results {
                     .border_type(theme.border_type)
                     .border_style(theme.results_worst_keys_border),
             );
-            slow.render(info_chunks[2], buf);
+            slow.render(info_chunks[next_chunk], buf);
+            next_chunk += 1;
+        }
+
+        if has_dwell {
+            let mut dwell_text = Text::styled("", theme.results_worst_keys);
+            dwell_text.extend(
+                self.dwell
+                    .per_key
+                    .iter()
+                    .take(5)
+                    .map(|(ch, ms)| Line::from(format!("- {}: {:.0}ms", ch, ms))),
+            );
+            if let Some(avg) = self.dwell.overall_avg_ms {
+                dwell_text.extend([Line::from(format!("avg: {:.0}ms", avg))]);
+            }
+            let dwell = Paragraph::new(dwell_text).block(
+                Block::default()
+                    .title(Span::styled("Key Hold", theme.title))
+                    .borders(Borders::ALL)
+                    .border_type(theme.border_type)
+                    .border_style(theme.results_worst_keys_border),
+            );
+            dwell.render(info_chunks[next_chunk], buf);
         }
 
         let wpm_sma: Vec<(f64, f64)> = self
