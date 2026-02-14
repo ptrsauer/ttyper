@@ -165,6 +165,7 @@ mod tests {
                 per_key: key_accuracy,
             },
             missed_words: missed.into_iter().map(String::from).collect(),
+            words: vec![],
         }
     }
 

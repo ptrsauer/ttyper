@@ -389,6 +389,21 @@ fn main() -> io::Result<()> {
                     ));
                 }
                 Event::Key(KeyEvent {
+                    code: KeyCode::Char('t'),
+                    kind: KeyEventKind::Press,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) => {
+                    if result.words.is_empty() {
+                        continue;
+                    }
+                    state = State::Test(Test::new(
+                        result.words.clone(),
+                        !opt.no_backtrack,
+                        opt.sudden_death,
+                    ));
+                }
+                Event::Key(KeyEvent {
                     code: KeyCode::Char('q'),
                     kind: KeyEventKind::Press,
                     modifiers: KeyModifiers::NONE,

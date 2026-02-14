@@ -288,9 +288,9 @@ impl ThemedWidget for &results::Results {
             .split(res_chunks[0]);
 
         let msg = if self.missed_words.is_empty() {
-            "Press 'q' to quit or 'r' for another test"
+            "Press 'q' to quit, 'r' for new test or 't' to repeat"
         } else {
-            "Press 'q' to quit, 'r' for another test or 'p' to practice missed words"
+            "Press 'q' to quit, 'r' for new test, 't' to repeat or 'p' to practice missed words"
         };
 
         let exit = Span::styled(msg, theme.results_restart_prompt);

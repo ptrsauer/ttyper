@@ -59,6 +59,7 @@ pub struct Results {
     pub timing: TimingData,
     pub accuracy: AccuracyData,
     pub missed_words: Vec<String>,
+    pub words: Vec<String>,
 }
 
 impl From<&Test> for Results {
@@ -77,6 +78,7 @@ impl From<&Test> for Results {
             timing: calc_timing(&events),
             accuracy: calc_accuracy(&events, &target_chars),
             missed_words: calc_missed_words(test),
+            words: test.words.iter().map(|w| w.text.clone()).collect(),
         }
     }
 }
@@ -265,5 +267,30 @@ mod tests {
         // Overall: 1 correct out of 4
         assert_eq!(results.accuracy.overall.numerator, 1);
         assert_eq!(results.accuracy.overall.denominator, 4);
+    }
+
+    #[test]
+    fn results_preserve_word_list() {
+        let words = vec!["hello".to_string(), "world".to_string(), "test".to_string()];
+        let test = Test::new(words.clone(), true, false);
+
+        let results = Results::from(&test);
+
+        assert_eq!(results.words, words, "Results should preserve the original word list");
+    }
+
+    #[test]
+    fn results_preserve_word_order() {
+        let words = vec!["zebra".to_string(), "apple".to_string(), "mango".to_string()];
+        let test = Test::new(words.clone(), true, false);
+
+        let results = Results::from(&test);
+
+        assert_eq!(
+            results.words[0], "zebra",
+            "Word order should be preserved exactly"
+        );
+        assert_eq!(results.words[1], "apple");
+        assert_eq!(results.words[2], "mango");
     }
 }
