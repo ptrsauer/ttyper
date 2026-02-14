@@ -249,6 +249,11 @@ fn main() -> io::Result<()> {
         .gen_contents()
         .expect("Couldn't get test contents. Make sure the specified language actually exists.");
 
+    if contents.is_empty() {
+        eprintln!("Error: No words to type. The word list is empty.");
+        return Ok(());
+    }
+
     terminal::enable_raw_mode()?;
     execute!(
         io::stdout(),
