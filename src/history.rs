@@ -8,7 +8,7 @@ use std::path::Path;
 
 pub const WPM_PER_CPS: f64 = 12.0;
 const CSV_HEADER: &str =
-    "datetime,language,words,wpm_raw,wpm_adjusted,accuracy,correct,total,worst_keys,missed_words";
+    "datetime,language,words,wpm_raw,wpm_adjusted,accuracy,correct,total,worst_keys,missed_words,avg_dwell_ms";
 
 /// Calculate raw and adjusted WPM from characters per second and accuracy (0.0–1.0).
 pub fn calculate_wpms(cps: f64, accuracy: f64) -> (f64, f64) {
@@ -56,8 +56,13 @@ pub fn format_csv_line(
     let worst_str = format_worst_keys(&results.accuracy.per_key);
     let missed_str = results.missed_words.join(";");
 
+    let dwell_str = results
+        .dwell
+        .overall_avg_ms
+        .map_or(String::new(), |ms| format!("{:.1}", ms));
+
     format!(
-        "{},{},{},{:.1},{:.1},{:.1},{},{},{},{}",
+        "{},{},{},{:.1},{:.1},{:.1},{},{},{},{},{}",
         timestamp,
         language,
         words,
@@ -68,6 +73,7 @@ pub fn format_csv_line(
         results.accuracy.overall.denominator,
         worst_str,
         missed_str,
+        dwell_str,
     )
 }
 
@@ -227,6 +233,7 @@ struct HistoryRow {
     wpm_raw: f64,
     wpm_adj: f64,
     accuracy: f64,
+    avg_dwell_ms: Option<f64>,
 }
 
 /// Parse filtered CSV data lines into HistoryRow structs.
@@ -234,7 +241,7 @@ fn parse_history_rows(data_lines: &[&str], filters: &Filters) -> Vec<HistoryRow>
     data_lines
         .iter()
         .filter_map(|line| {
-            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            let fields: Vec<&str> = line.splitn(12, ',').collect();
             if fields.len() < 9 || !matches_filters(&fields, filters) {
                 return None;
             }
@@ -244,6 +251,7 @@ fn parse_history_rows(data_lines: &[&str], filters: &Filters) -> Vec<HistoryRow>
                 wpm_raw: fields[3].parse().ok()?,
                 wpm_adj: fields[4].parse().ok()?,
                 accuracy: fields[5].parse().ok()?,
+                avg_dwell_ms: fields.get(10).and_then(|s| s.parse().ok()),
             })
         })
         .collect()
@@ -369,6 +377,13 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
         most_lang, most_count
     );
 
+    // Overall dwell stats (if any rows have dwell data)
+    let dwell_values: Vec<f64> = rows.iter().filter_map(|r| r.avg_dwell_ms).collect();
+    if !dwell_values.is_empty() {
+        let avg_dwell = dwell_values.iter().sum::<f64>() / dwell_values.len() as f64;
+        println!("  Avg Key Dwell: {:.0}ms", avg_dwell);
+    }
+
     // Last 7 days stats
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let seven_days_ago = (chrono::Local::now() - chrono::Duration::days(7))
@@ -432,7 +447,7 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::results::{AccuracyData, TimingData};
+    use crate::test::results::{AccuracyData, DwellData, TimingData};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::collections::HashMap;
 
@@ -464,6 +479,11 @@ mod tests {
             accuracy: AccuracyData {
                 overall: Fraction::new(correct, total),
                 per_key: key_accuracy,
+            },
+            dwell: DwellData {
+                per_key: vec![],
+                overall_avg_ms: None,
+                has_data: false,
             },
             missed_words: missed.into_iter().map(String::from).collect(),
             slow_words: vec![],
@@ -545,15 +565,16 @@ mod tests {
         );
 
         let line = format_csv_line("2026-02-14 12:43:34", "peter1000", 50, &results);
-        let fields: Vec<&str> = line.splitn(10, ',').collect();
+        let fields: Vec<&str> = line.splitn(12, ',').collect();
 
-        assert_eq!(fields.len(), 10);
+        assert_eq!(fields.len(), 11);
         assert_eq!(fields[0], "2026-02-14 12:43:34");
         assert_eq!(fields[1], "peter1000");
         assert_eq!(fields[2], "50");
         assert_eq!(fields[6], "380");
         assert_eq!(fields[7], "400");
         assert_eq!(fields[9], "Architektur;Frontend");
+        assert_eq!(fields[10], "", "No dwell data → empty field");
     }
 
     #[test]
@@ -561,7 +582,7 @@ mod tests {
         let results = make_results(6.5, 380, 400, vec![], vec![]);
 
         let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
-        let fields: Vec<&str> = line.splitn(10, ',').collect();
+        let fields: Vec<&str> = line.splitn(12, ',').collect();
 
         assert_eq!(fields[3], "78.0"); // 6.5 * 12 = 78.0
         assert_eq!(fields[4], "74.1"); // 78.0 * 0.95 = 74.1
@@ -573,9 +594,25 @@ mod tests {
         let results = make_results(5.0, 100, 100, vec![], vec![]);
 
         let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
-        let fields: Vec<&str> = line.splitn(10, ',').collect();
+        let fields: Vec<&str> = line.splitn(12, ',').collect();
 
-        assert_eq!(fields[9], "");
+        assert_eq!(fields[9], "", "missed_words should be empty");
+        assert_eq!(fields[10], "", "dwell should be empty when no data");
+    }
+
+    #[test]
+    fn test_format_csv_line_with_dwell_data() {
+        let mut results = make_results(5.0, 100, 100, vec![], vec![]);
+        results.dwell = DwellData {
+            per_key: vec![('a', 95.0), ('b', 110.0)],
+            overall_avg_ms: Some(102.5),
+            has_data: true,
+        };
+
+        let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
+        let fields: Vec<&str> = line.splitn(12, ',').collect();
+
+        assert_eq!(fields[10], "102.5", "avg_dwell_ms should be present");
     }
 
     // --- File I/O integration ---
@@ -854,5 +891,37 @@ mod tests {
         // Should be sorted chronologically
         assert!(weeks[0].1 < weeks[1].1);
         assert!(weeks[1].1 < weeks[2].1);
+    }
+
+    // --- Dwell CSV backward compatibility ---
+
+    #[test]
+    fn test_parse_old_csv_without_dwell() {
+        // Old format: 10 fields, no dwell column
+        let lines = sample_csv_lines();
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        assert!(rows.iter().all(|r| r.avg_dwell_ms.is_none()));
+    }
+
+    #[test]
+    fn test_parse_new_csv_with_dwell() {
+        let lines = vec![
+            "2026-02-14 10:00:00,english,50,82.0,77.9,95.0,380,400,,world,98.5",
+        ];
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        assert_eq!(rows.len(), 1);
+        assert!((rows[0].avg_dwell_ms.unwrap() - 98.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_mixed_csv_old_and_new() {
+        let lines = vec![
+            "2026-02-13 10:00:00,english,50,80.0,76.0,95.0,380,400,,",
+            "2026-02-14 10:00:00,english,50,82.0,77.9,95.0,380,400,,,102.3",
+        ];
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].avg_dwell_ms.is_none());
+        assert!((rows[1].avg_dwell_ms.unwrap() - 102.3).abs() < 0.01);
     }
 }
