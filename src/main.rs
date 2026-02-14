@@ -360,18 +360,19 @@ fn main() -> io::Result<()> {
     }
 
     terminal::enable_raw_mode()?;
-    // Enable Release events for key dwell measurement (kitty keyboard protocol).
-    // Silently ignored on terminals that don't support it.
-    let _ = execute!(
-        io::stdout(),
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
-    );
     execute!(
         io::stdout(),
         cursor::Hide,
         cursor::SavePosition,
         terminal::EnterAlternateScreen,
     )?;
+    // Enable Release events for key dwell measurement (kitty keyboard protocol).
+    // Must be AFTER EnterAlternateScreen — each screen has its own keyboard mode stack.
+    // Silently ignored on terminals that don't support it.
+    let _ = execute!(
+        io::stdout(),
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
+    );
     terminal.clear()?;
 
     let mut state = State::Test(Test::new(contents, !opt.no_backtrack, opt.sudden_death));
