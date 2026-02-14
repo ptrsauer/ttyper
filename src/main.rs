@@ -70,6 +70,10 @@ struct Opt {
     #[arg(long)]
     history: bool,
 
+    /// Show only the last N history entries
+    #[arg(long, value_name = "N")]
+    last: Option<usize>,
+
     /// Disable saving results to history
     #[arg(long)]
     no_save: bool,
@@ -261,8 +265,13 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    if opt.last.is_some() && !opt.history {
+        eprintln!("Error: --last requires --history flag");
+        return Ok(());
+    }
+
     if opt.history {
-        history::show_history(&opt.history_file());
+        history::show_history(&opt.history_file(), opt.last);
         return Ok(());
     }
 
