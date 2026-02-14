@@ -76,7 +76,7 @@ struct Opt {
 }
 
 impl Opt {
-    fn gen_contents(&self) -> Option<Vec<String>> {
+    fn gen_contents(&self) -> Result<Vec<String>, String> {
         match &self.contents {
             Some(path) => {
                 let lines: Vec<String> = if path.as_os_str() == "-" {
@@ -86,14 +86,16 @@ impl Opt {
                         .map_while(Result::ok)
                         .collect()
                 } else {
-                    let file = fs::File::open(path).expect("Error reading language file.");
+                    let file = fs::File::open(path).map_err(|e| {
+                        format!("Error: Cannot read '{}': {}", path.display(), e)
+                    })?;
                     io::BufReader::new(file)
                         .lines()
                         .map_while(Result::ok)
                         .collect()
                 };
 
-                Some(lines.iter().map(String::from).collect())
+                Ok(lines.iter().map(String::from).collect())
             }
             None => {
                 let lang_name = self
@@ -101,21 +103,42 @@ impl Opt {
                     .clone()
                     .unwrap_or_else(|| self.config().default_language);
 
-                let bytes: Vec<u8> = self
-                    .language_file
-                    .as_ref()
-                    .map(fs::read)
-                    .and_then(Result::ok)
-                    .or_else(|| fs::read(self.language_dir().join(&lang_name)).ok())
-                    .or_else(|| {
-                        Resources::get(&format!("language/{}", &lang_name))
-                            .map(|f| f.data.into_owned())
-                    })?;
+                let bytes: Vec<u8> = if let Some(lang_file) = &self.language_file {
+                    fs::read(lang_file).map_err(|e| {
+                        format!(
+                            "Error: Cannot read language file '{}': {}",
+                            lang_file.display(),
+                            e
+                        )
+                    })?
+                } else {
+                    fs::read(self.language_dir().join(&lang_name))
+                        .ok()
+                        .or_else(|| {
+                            Resources::get(&format!("language/{}", &lang_name))
+                                .map(|f| f.data.into_owned())
+                        })
+                        .ok_or_else(|| {
+                            format!(
+                                "Error: Language '{}' not found. Use --list-languages to see available languages.",
+                                lang_name
+                            )
+                        })?
+                };
 
                 let mut rng = thread_rng();
 
                 let mut language: Vec<&str> = str::from_utf8(&bytes)
-                    .expect("Language file had non-utf8 encoding.")
+                    .map_err(|_| {
+                        if let Some(lang_file) = &self.language_file {
+                            format!(
+                                "Error: Language file '{}' has invalid UTF-8 encoding.",
+                                lang_file.display()
+                            )
+                        } else {
+                            format!("Error: Language '{}' has invalid UTF-8 encoding.", lang_name)
+                        }
+                    })?
                     .lines()
                     .collect();
                 language.shuffle(&mut rng);
@@ -128,7 +151,7 @@ impl Opt {
                     .collect();
                 contents.shuffle(&mut rng);
 
-                Some(contents)
+                Ok(contents)
             }
         }
     }
@@ -245,9 +268,13 @@ fn main() -> io::Result<()> {
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    let contents = opt
-        .gen_contents()
-        .expect("Couldn't get test contents. Make sure the specified language actually exists.");
+    let contents = match opt.gen_contents() {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            return Ok(());
+        }
+    };
 
     if contents.is_empty() {
         eprintln!("Error: No words to type. The word list is empty.");
@@ -316,7 +343,7 @@ fn main() -> io::Result<()> {
                     ..
                 }) => {
                     match opt.gen_contents() {
-                        Some(contents) if !contents.is_empty() => {
+                        Ok(contents) if !contents.is_empty() => {
                             state = State::Test(Test::new(
                                 contents,
                                 !opt.no_backtrack,
