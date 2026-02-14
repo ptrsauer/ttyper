@@ -290,12 +290,16 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
-    // When stdin was piped (e.g. `echo "words" | ttyper -`), it's now at EOF.
+    // When stdin is not a TTY (piped or redirected), it's at EOF after gen_contents().
     // Crossterm reads keyboard events from stdin, so we must reattach it to
     // the real terminal via /dev/tty before entering the event loop.
     #[cfg(unix)]
     if !std::io::IsTerminal::is_terminal(&io::stdin()) {
-        reattach_stdin()?;
+        if let Err(e) = reattach_stdin() {
+            eprintln!("Error: Cannot open terminal for keyboard input: {}", e);
+            eprintln!("Piped input requires an available terminal (/dev/tty).");
+            return Ok(());
+        }
     }
 
     terminal::enable_raw_mode()?;
