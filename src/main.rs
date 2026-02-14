@@ -394,6 +394,9 @@ fn main() -> io::Result<()> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
+                    if result.words.is_empty() {
+                        continue;
+                    }
                     state = State::Test(Test::new(
                         result.words.clone(),
                         !opt.no_backtrack,
