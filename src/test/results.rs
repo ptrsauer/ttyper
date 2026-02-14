@@ -66,8 +66,12 @@ impl From<&Test> for Results {
         let events: Vec<&super::TestEvent> =
             test.words.iter().flat_map(|w| w.events.iter()).collect();
 
-        let target_chars: HashSet<char> =
-            test.words.iter().flat_map(|w| w.text.chars()).collect();
+        let target_chars: HashSet<char> = test
+            .words
+            .iter()
+            .flat_map(|w| w.text.chars())
+            .flat_map(|c| [c.to_ascii_lowercase(), c.to_ascii_uppercase()])
+            .collect();
 
         Self {
             timing: calc_timing(&events),
@@ -224,6 +228,23 @@ mod tests {
         let a_acc = results.accuracy.per_key.get(&key_for('a')).unwrap();
         assert_eq!(a_acc.numerator, 1);
         assert_eq!(a_acc.denominator, 2);
+    }
+
+    #[test]
+    fn shift_variant_of_target_key_tracked() {
+        // Target has lowercase 'e', user types uppercase 'E' (Shift mistake)
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        test.words[0].events.push(make_event('h', true));
+        test.words[0].events.push(make_event('E', false)); // Shift-variant of 'e'
+        test.words[0].events.push(make_event('l', true));
+
+        let results = Results::from(&test);
+
+        // 'E' should be tracked because 'e' is in the target (case-insensitive)
+        assert!(
+            results.accuracy.per_key.contains_key(&key_for('E')),
+            "Shift-variant 'E' of target key 'e' should be tracked in per_key"
+        );
     }
 
     #[test]
