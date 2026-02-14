@@ -1,7 +1,7 @@
 use super::{is_missed_word_event, Test};
 
-use crossterm::event::KeyEvent;
-use std::collections::HashMap;
+use crossterm::event::{KeyCode, KeyEvent};
+use std::collections::{HashMap, HashSet};
 use std::{cmp, fmt};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -66,9 +66,12 @@ impl From<&Test> for Results {
         let events: Vec<&super::TestEvent> =
             test.words.iter().flat_map(|w| w.events.iter()).collect();
 
+        let target_chars: HashSet<char> =
+            test.words.iter().flat_map(|w| w.text.chars()).collect();
+
         Self {
             timing: calc_timing(&events),
-            accuracy: calc_accuracy(&events),
+            accuracy: calc_accuracy(&events, &target_chars),
             missed_words: calc_missed_words(test),
         }
     }
@@ -109,7 +112,7 @@ fn calc_timing(events: &[&super::TestEvent]) -> TimingData {
     timing
 }
 
-fn calc_accuracy(events: &[&super::TestEvent]) -> AccuracyData {
+fn calc_accuracy(events: &[&super::TestEvent], target_chars: &HashSet<char>) -> AccuracyData {
     let mut acc = AccuracyData {
         overall: Fraction::new(0, 0),
         per_key: HashMap::new(),
@@ -119,17 +122,29 @@ fn calc_accuracy(events: &[&super::TestEvent]) -> AccuracyData {
         .iter()
         .filter(|event| event.correct.is_some())
         .for_each(|event| {
-            let key = acc
-                .per_key
-                .entry(event.key)
-                .or_insert_with(|| Fraction::new(0, 0));
-
             acc.overall.denominator += 1;
-            key.denominator += 1;
-
             if event.correct.unwrap() {
                 acc.overall.numerator += 1;
-                key.numerator += 1;
+            }
+
+            // Only track per-key accuracy for characters that appear in the target text.
+            // Keys not in the target (e.g. typing 'x' when only 'abc' are expected) would
+            // always show 0% accuracy, which is misleading.
+            let in_target = match event.key.code {
+                KeyCode::Char(c) => target_chars.contains(&c),
+                _ => true,
+            };
+
+            if in_target {
+                let key = acc
+                    .per_key
+                    .entry(event.key)
+                    .or_insert_with(|| Fraction::new(0, 0));
+
+                key.denominator += 1;
+                if event.correct.unwrap() {
+                    key.numerator += 1;
+                }
             }
         });
 
@@ -142,4 +157,92 @@ fn calc_missed_words(test: &Test) -> Vec<String> {
         .filter(|word| word.events.iter().any(is_missed_word_event))
         .map(|word| word.text.clone())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::time::Instant;
+
+    fn make_event(c: char, correct: bool) -> super::super::TestEvent {
+        super::super::TestEvent {
+            time: Instant::now(),
+            key: KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            correct: Some(correct),
+        }
+    }
+
+    fn key_for(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn non_target_key_excluded_from_per_key() {
+        let mut test = Test::new(vec!["abc".to_string()], true, false);
+        test.words[0].events.push(make_event('a', true));
+        test.words[0].events.push(make_event('x', false)); // 'x' not in "abc"
+        test.words[0].events.push(make_event('b', true));
+        test.words[0].events.push(make_event('c', true));
+
+        let results = Results::from(&test);
+
+        // 'x' should NOT appear in per_key
+        assert!(
+            !results.accuracy.per_key.contains_key(&key_for('x')),
+            "Non-target key 'x' should not be in per_key accuracy"
+        );
+
+        // Target keys should be present
+        assert!(results.accuracy.per_key.contains_key(&key_for('a')));
+        assert!(results.accuracy.per_key.contains_key(&key_for('b')));
+        assert!(results.accuracy.per_key.contains_key(&key_for('c')));
+    }
+
+    #[test]
+    fn non_target_key_still_counted_in_overall() {
+        let mut test = Test::new(vec!["ab".to_string()], true, false);
+        test.words[0].events.push(make_event('a', true));
+        test.words[0].events.push(make_event('x', false)); // wrong key, not in target
+        test.words[0].events.push(make_event('b', true));
+
+        let results = Results::from(&test);
+
+        // Overall: 2 correct (a, b) out of 3 total (a, x, b)
+        assert_eq!(results.accuracy.overall.numerator, 2);
+        assert_eq!(results.accuracy.overall.denominator, 3);
+    }
+
+    #[test]
+    fn target_key_with_errors_tracked_correctly() {
+        let mut test = Test::new(vec!["aa".to_string()], true, false);
+        test.words[0].events.push(make_event('a', true));
+        test.words[0].events.push(make_event('a', false)); // 'a' is in target but typed wrong position
+
+        let results = Results::from(&test);
+
+        let a_acc = results.accuracy.per_key.get(&key_for('a')).unwrap();
+        assert_eq!(a_acc.numerator, 1);
+        assert_eq!(a_acc.denominator, 2);
+    }
+
+    #[test]
+    fn multiple_non_target_keys_all_excluded() {
+        let mut test = Test::new(vec!["a".to_string()], true, false);
+        test.words[0].events.push(make_event('a', true));
+        test.words[0].events.push(make_event('x', false));
+        test.words[0].events.push(make_event('y', false));
+        test.words[0].events.push(make_event('z', false));
+
+        let results = Results::from(&test);
+
+        assert!(!results.accuracy.per_key.contains_key(&key_for('x')));
+        assert!(!results.accuracy.per_key.contains_key(&key_for('y')));
+        assert!(!results.accuracy.per_key.contains_key(&key_for('z')));
+        assert!(results.accuracy.per_key.contains_key(&key_for('a')));
+
+        // Overall: 1 correct out of 4
+        assert_eq!(results.accuracy.overall.numerator, 1);
+        assert_eq!(results.accuracy.overall.denominator, 4);
+    }
 }
