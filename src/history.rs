@@ -106,16 +106,33 @@ fn matches_filters(fields: &[&str], filters: &Filters) -> bool {
         }
     }
     if let Some(since) = filters.since {
-        if fields.is_empty() || &fields[0][..10] < since {
+        if fields.is_empty() || fields[0].len() < 10 || &fields[0][..10] < since {
             return false;
         }
     }
     if let Some(until) = filters.until {
-        if fields.is_empty() || &fields[0][..10] > until {
+        if fields.is_empty() || fields[0].len() < 10 || &fields[0][..10] > until {
             return false;
         }
     }
     true
+}
+
+/// Validate date format (YYYY-MM-DD).
+pub fn validate_date_format(date: &str) -> Result<(), String> {
+    if date.len() != 10
+        || date.as_bytes()[4] != b'-'
+        || date.as_bytes()[7] != b'-'
+        || !date[..4].chars().all(|c| c.is_ascii_digit())
+        || !date[5..7].chars().all(|c| c.is_ascii_digit())
+        || !date[8..10].chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(format!(
+            "Error: Invalid date format '{}'. Expected YYYY-MM-DD (e.g., 2026-02-14).",
+            date
+        ));
+    }
+    Ok(())
 }
 
 /// Format history data rows into displayable lines.
@@ -170,6 +187,16 @@ pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters)
     let shown = rows.len();
     let total = data_lines.len();
 
+    let has_filters = last.is_some()
+        || filters.language.is_some()
+        || filters.since.is_some()
+        || filters.until.is_some();
+
+    if shown == 0 && has_filters {
+        println!("No matching results for the given filters.");
+        return;
+    }
+
     println!(
         "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
         "Date", "Language", "Words", "Raw WPM", "Adj WPM", "Acc %", "Worst Keys"
@@ -179,11 +206,6 @@ pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters)
     for row in &rows {
         println!("{}", row);
     }
-
-    let has_filters = last.is_some()
-        || filters.language.is_some()
-        || filters.since.is_some()
-        || filters.until.is_some();
 
     if has_filters {
         println!(
@@ -508,6 +530,46 @@ mod tests {
         let filters = Filters { language: Some("peter1000"), since: None, until: None };
         // 3 peter1000 entries, take last 1
         let rows = format_history_rows(&lines, Some(1), &filters);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].starts_with("2026-02-14"));
+    }
+
+    #[test]
+    fn test_filter_same_day_range() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: None, since: Some("2026-02-12"), until: Some("2026-02-12") };
+        let rows = format_history_rows(&lines, None, &filters);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].starts_with("2026-02-12"));
+    }
+
+    // --- Date validation ---
+
+    #[test]
+    fn test_validate_date_valid() {
+        assert!(validate_date_format("2026-02-14").is_ok());
+        assert!(validate_date_format("2000-01-01").is_ok());
+    }
+
+    #[test]
+    fn test_validate_date_invalid_format() {
+        assert!(validate_date_format("2026-2-5").is_err());
+        assert!(validate_date_format("14-02-2026").is_err());
+        assert!(validate_date_format("not-a-date").is_err());
+        assert!(validate_date_format("2026/02/14").is_err());
+        assert!(validate_date_format("20260214").is_err());
+    }
+
+    // --- Short timestamp robustness ---
+
+    #[test]
+    fn test_filter_skips_malformed_short_timestamp() {
+        let lines = vec![
+            "short,english,50,72.0,68.4,95.0,190,200,a:90%,",
+            "2026-02-14 10:00:00,english,50,75.0,71.2,95.0,190,200,,",
+        ];
+        let filters = Filters { language: None, since: Some("2026-02-01"), until: None };
+        let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 1);
         assert!(rows[0].starts_with("2026-02-14"));
     }

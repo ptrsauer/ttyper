@@ -293,6 +293,24 @@ fn main() -> io::Result<()> {
     }
 
     if opt.history {
+        if let Some(ref since) = opt.since {
+            if let Err(msg) = history::validate_date_format(since) {
+                eprintln!("{}", msg);
+                return Ok(());
+            }
+        }
+        if let Some(ref until) = opt.until {
+            if let Err(msg) = history::validate_date_format(until) {
+                eprintln!("{}", msg);
+                return Ok(());
+            }
+        }
+        if let (Some(ref since), Some(ref until)) = (&opt.since, &opt.until) {
+            if since > until {
+                eprintln!("Error: --since date must be before or equal to --until date");
+                return Ok(());
+            }
+        }
         let filters = history::Filters {
             language: opt.history_lang.as_deref(),
             since: opt.since.as_deref(),
