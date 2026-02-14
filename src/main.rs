@@ -404,6 +404,27 @@ fn main() -> io::Result<()> {
                     ));
                 }
                 Event::Key(KeyEvent {
+                    code: KeyCode::Char('s'),
+                    kind: KeyEventKind::Press,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }) => {
+                    if result.slow_words.is_empty() {
+                        continue;
+                    }
+                    let mut practice_words: Vec<String> = result
+                        .slow_words
+                        .iter()
+                        .flat_map(|w| vec![w.clone(); 5])
+                        .collect();
+                    practice_words.shuffle(&mut thread_rng());
+                    state = State::Test(Test::new(
+                        practice_words,
+                        !opt.no_backtrack,
+                        opt.sudden_death,
+                    ));
+                }
+                Event::Key(KeyEvent {
                     code: KeyCode::Char('q'),
                     kind: KeyEventKind::Press,
                     modifiers: KeyModifiers::NONE,

@@ -59,6 +59,7 @@ pub struct Results {
     pub timing: TimingData,
     pub accuracy: AccuracyData,
     pub missed_words: Vec<String>,
+    pub slow_words: Vec<String>,
     pub words: Vec<String>,
 }
 
@@ -78,6 +79,7 @@ impl From<&Test> for Results {
             timing: calc_timing(&events),
             accuracy: calc_accuracy(&events, &target_chars),
             missed_words: calc_missed_words(test),
+            slow_words: calc_slow_words(test),
             words: test.words.iter().map(|w| w.text.clone()).collect(),
         }
     }
@@ -162,6 +164,40 @@ fn calc_missed_words(test: &Test) -> Vec<String> {
         .iter()
         .filter(|word| word.events.iter().any(is_missed_word_event))
         .map(|word| word.text.clone())
+        .collect()
+}
+
+/// Returns the 5 slowest correctly-typed words, sorted slowest first.
+/// Speed is measured as time-per-character (duration / word length).
+/// Words with errors (missed words) are excluded.
+fn calc_slow_words(test: &Test) -> Vec<String> {
+    let mut word_speeds: Vec<(&str, f64)> = test
+        .words
+        .iter()
+        .filter(|word| {
+            // Exclude missed words (those with any incorrect event)
+            !word.events.iter().any(is_missed_word_event)
+        })
+        .filter_map(|word| {
+            // Need at least 2 events to measure timing
+            if word.events.len() < 2 || word.text.is_empty() {
+                return None;
+            }
+            let first = word.events.first().unwrap().time;
+            let last = word.events.last().unwrap().time;
+            let duration = last.checked_duration_since(first)?;
+            let time_per_char = duration.as_secs_f64() / word.text.len() as f64;
+            Some((word.text.as_str(), time_per_char))
+        })
+        .collect();
+
+    // Sort by time_per_char descending (slowest first)
+    word_speeds.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    word_speeds
+        .into_iter()
+        .take(5)
+        .map(|(text, _)| text.to_string())
         .collect()
 }
 
@@ -267,6 +303,125 @@ mod tests {
         // Overall: 1 correct out of 4
         assert_eq!(results.accuracy.overall.numerator, 1);
         assert_eq!(results.accuracy.overall.denominator, 4);
+    }
+
+    fn make_timed_event(c: char, correct: bool, time: Instant) -> super::super::TestEvent {
+        super::super::TestEvent {
+            time,
+            key: KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            correct: Some(correct),
+        }
+    }
+
+    #[test]
+    fn slow_words_identifies_slowest() {
+        let now = Instant::now();
+        let mut test = Test::new(
+            vec!["fast".to_string(), "slow".to_string(), "mid".to_string()],
+            true,
+            false,
+        );
+
+        // "fast" — 4 chars in 0.4s = 0.1s/char
+        for (i, c) in "fast".chars().enumerate() {
+            test.words[0]
+                .events
+                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+        }
+
+        // "slow" — 4 chars in 2.0s = 0.5s/char
+        for (i, c) in "slow".chars().enumerate() {
+            test.words[1]
+                .events
+                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 500)));
+        }
+
+        // "mid" — 3 chars in 0.6s = 0.2s/char
+        for (i, c) in "mid".chars().enumerate() {
+            test.words[2]
+                .events
+                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 200)));
+        }
+
+        let slow = calc_slow_words(&test);
+        assert_eq!(slow[0], "slow", "Slowest word should be first");
+        assert_eq!(slow[1], "mid", "Second slowest should be second");
+        assert_eq!(slow[2], "fast", "Fastest should be last");
+    }
+
+    #[test]
+    fn slow_words_excludes_missed() {
+        let now = Instant::now();
+        let mut test = Test::new(
+            vec!["correct".to_string(), "wrong".to_string()],
+            true,
+            false,
+        );
+
+        // "correct" — typed correctly
+        for (i, c) in "correct".chars().enumerate() {
+            test.words[0]
+                .events
+                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+        }
+
+        // "wrong" — has an error event (should be excluded)
+        test.words[1]
+            .events
+            .push(make_timed_event('w', true, now));
+        test.words[1]
+            .events
+            .push(make_timed_event('x', false, now + std::time::Duration::from_millis(500)));
+
+        let slow = calc_slow_words(&test);
+        assert_eq!(slow.len(), 1, "Only correctly-typed words should be included");
+        assert_eq!(slow[0], "correct");
+    }
+
+    #[test]
+    fn slow_words_skips_single_event_words() {
+        let now = Instant::now();
+        let mut test = Test::new(
+            vec!["a".to_string(), "hello".to_string()],
+            true,
+            false,
+        );
+
+        // "a" — only 1 event (can't measure timing)
+        test.words[0]
+            .events
+            .push(make_timed_event('a', true, now));
+
+        // "hello" — 5 events
+        for (i, c) in "hello".chars().enumerate() {
+            test.words[1]
+                .events
+                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+        }
+
+        let slow = calc_slow_words(&test);
+        assert_eq!(slow.len(), 1, "Words with <2 events should be skipped");
+        assert_eq!(slow[0], "hello");
+    }
+
+    #[test]
+    fn slow_words_caps_at_five() {
+        let now = Instant::now();
+        let words: Vec<String> = (0..10).map(|i| format!("word{}", i)).collect();
+        let mut test = Test::new(words, true, false);
+
+        for (wi, word) in test.words.iter_mut().enumerate() {
+            for (ci, c) in word.text.clone().chars().enumerate() {
+                word.events.push(make_timed_event(
+                    c,
+                    true,
+                    now + std::time::Duration::from_millis((wi as u64 * 100) + (ci as u64 * 50)),
+                ));
+            }
+        }
+
+        let slow = calc_slow_words(&test);
+        assert_eq!(slow.len(), 5, "Should return at most 5 slow words");
     }
 
     #[test]
