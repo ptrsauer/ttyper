@@ -147,7 +147,7 @@ fn format_history_rows(data_lines: &[&str], last: Option<usize>, filters: &Filte
     let filtered: Vec<&str> = data_lines
         .iter()
         .filter(|line| {
-            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            let fields: Vec<&str> = line.splitn(11, ',').collect();
             fields.len() >= 9 && matches_filters(&fields, filters)
         })
         .copied()
@@ -162,7 +162,7 @@ fn format_history_rows(data_lines: &[&str], last: Option<usize>, filters: &Filte
         .iter()
         .skip(skip)
         .map(|line| {
-            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            let fields: Vec<&str> = line.splitn(11, ',').collect();
             format!(
                 "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
                 fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[8]
@@ -241,7 +241,7 @@ fn parse_history_rows(data_lines: &[&str], filters: &Filters) -> Vec<HistoryRow>
     data_lines
         .iter()
         .filter_map(|line| {
-            let fields: Vec<&str> = line.splitn(12, ',').collect();
+            let fields: Vec<&str> = line.splitn(11, ',').collect();
             if fields.len() < 9 || !matches_filters(&fields, filters) {
                 return None;
             }
@@ -381,7 +381,7 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
     let dwell_values: Vec<f64> = rows.iter().filter_map(|r| r.avg_dwell_ms).collect();
     if !dwell_values.is_empty() {
         let avg_dwell = dwell_values.iter().sum::<f64>() / dwell_values.len() as f64;
-        println!("  Avg Key Dwell: {:.0}ms", avg_dwell);
+        println!("  Avg Key Hold: {:.0}ms", avg_dwell);
     }
 
     // Last 7 days stats
@@ -565,7 +565,7 @@ mod tests {
         );
 
         let line = format_csv_line("2026-02-14 12:43:34", "peter1000", 50, &results);
-        let fields: Vec<&str> = line.splitn(12, ',').collect();
+        let fields: Vec<&str> = line.splitn(11, ',').collect();
 
         assert_eq!(fields.len(), 11);
         assert_eq!(fields[0], "2026-02-14 12:43:34");
@@ -582,7 +582,7 @@ mod tests {
         let results = make_results(6.5, 380, 400, vec![], vec![]);
 
         let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
-        let fields: Vec<&str> = line.splitn(12, ',').collect();
+        let fields: Vec<&str> = line.splitn(11, ',').collect();
 
         assert_eq!(fields[3], "78.0"); // 6.5 * 12 = 78.0
         assert_eq!(fields[4], "74.1"); // 78.0 * 0.95 = 74.1
@@ -594,7 +594,7 @@ mod tests {
         let results = make_results(5.0, 100, 100, vec![], vec![]);
 
         let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
-        let fields: Vec<&str> = line.splitn(12, ',').collect();
+        let fields: Vec<&str> = line.splitn(11, ',').collect();
 
         assert_eq!(fields[9], "", "missed_words should be empty");
         assert_eq!(fields[10], "", "dwell should be empty when no data");
@@ -610,7 +610,7 @@ mod tests {
         };
 
         let line = format_csv_line("2026-02-14 12:00:00", "test", 50, &results);
-        let fields: Vec<&str> = line.splitn(12, ',').collect();
+        let fields: Vec<&str> = line.splitn(11, ',').collect();
 
         assert_eq!(fields[10], "102.5", "avg_dwell_ms should be present");
     }

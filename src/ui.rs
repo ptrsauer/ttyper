@@ -406,7 +406,7 @@ impl ThemedWidget for &results::Results {
             }
             let dwell = Paragraph::new(dwell_text).block(
                 Block::default()
-                    .title(Span::styled("Key Dwell", theme.title))
+                    .title(Span::styled("Key Hold", theme.title))
                     .borders(Borders::ALL)
                     .border_type(theme.border_type)
                     .border_style(theme.results_worst_keys_border),
