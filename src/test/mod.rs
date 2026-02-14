@@ -353,6 +353,19 @@ mod tests {
     }
 
     #[test]
+    fn tab_does_not_affect_progress() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "he");
+
+        test.handle_key(press(KeyCode::Tab));
+        assert_eq!(
+            test.words[0].progress, "he",
+            "Tab should not modify word progress (handled in main.rs, not handle_key)"
+        );
+        assert_eq!(test.current_word, 0);
+    }
+
+    #[test]
     fn ctrl_w_still_clears_entire_word() {
         let mut test = Test::new(vec!["hello".to_string()], true, false);
         type_string(&mut test, "hel");
