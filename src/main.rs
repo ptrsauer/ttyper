@@ -325,13 +325,27 @@ fn main() -> io::Result<()> {
         match state {
             State::Test(ref mut test) => {
                 if let Event::Key(key) = event {
-                    test.handle_key(key);
-                    if test.complete {
-                        let results = Results::from(&*test);
-                        if !opt.no_save {
-                            history::save_results(&opt.history_file(), &opt.effective_language(), opt.words.get(), &results);
+                    // TAB → restart with new words (no save)
+                    if key.code == KeyCode::Tab && key.kind == KeyEventKind::Press {
+                        match opt.gen_contents() {
+                            Ok(contents) if !contents.is_empty() => {
+                                state = State::Test(Test::new(
+                                    contents,
+                                    !opt.no_backtrack,
+                                    opt.sudden_death,
+                                ));
+                            }
+                            _ => continue,
                         }
-                        state = State::Results(results);
+                    } else {
+                        test.handle_key(key);
+                        if test.complete {
+                            let results = Results::from(&*test);
+                            if !opt.no_save {
+                                history::save_results(&opt.history_file(), &opt.effective_language(), opt.words.get(), &results);
+                            }
+                            state = State::Results(results);
+                        }
                     }
                 }
             }
