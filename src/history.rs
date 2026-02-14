@@ -241,9 +241,9 @@ fn parse_history_rows(data_lines: &[&str], filters: &Filters) -> Vec<HistoryRow>
             Some(HistoryRow {
                 date: fields[0][..10].to_string(),
                 language: fields[1].to_string(),
-                wpm_raw: fields[3].parse().unwrap_or(0.0),
-                wpm_adj: fields[4].parse().unwrap_or(0.0),
-                accuracy: fields[5].parse().unwrap_or(0.0),
+                wpm_raw: fields[3].parse().ok()?,
+                wpm_adj: fields[4].parse().ok()?,
+                accuracy: fields[5].parse().ok()?,
             })
         })
         .collect()
@@ -310,7 +310,7 @@ fn weekly_trend(rows: &[HistoryRow]) -> Vec<(String, f64)> {
     let mut week_data: HashMap<String, Vec<f64>> = HashMap::new();
     for row in rows {
         if let Ok(date) = NaiveDate::parse_from_str(&row.date, "%Y-%m-%d") {
-            let week = date.format("KW%V").to_string();
+            let week = date.format("W%V").to_string();
             week_data.entry(week).or_default().push(row.wpm_adj);
         }
     }
@@ -364,16 +364,17 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
     );
     println!("  Avg WPM: {:.1} (raw: {:.1})", avg_adj, avg_raw);
     println!("  Avg Accuracy: {:.1}%", avg_acc);
-    if rows.len() > 1 {
-        println!(
-            "  Most practiced: {} ({} tests)",
-            most_lang, most_count
-        );
-    }
+    println!(
+        "  Most practiced: {} ({} tests)",
+        most_lang, most_count
+    );
 
     // Last 7 days stats
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let seven_days_ago = (chrono::Local::now() - chrono::Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+    let eight_days_ago = (chrono::Local::now() - chrono::Duration::days(8))
         .format("%Y-%m-%d")
         .to_string();
     let fourteen_days_ago = (chrono::Local::now() - chrono::Duration::days(14))
@@ -389,8 +390,8 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
             "\nLast 7 days ({} tests)",
             recent.len()
         );
-        // Delta vs prior week
-        let prior = rows_in_range(&rows, &fourteen_days_ago, &seven_days_ago);
+        // Delta vs prior week (exclusive upper bound to avoid double-counting)
+        let prior = rows_in_range(&rows, &fourteen_days_ago, &eight_days_ago);
         if !prior.is_empty() {
             let prior_wpm = avg_wpm(&prior);
             let delta = recent_wpm - prior_wpm;
@@ -836,7 +837,7 @@ mod tests {
         // All dates are in the same week (KW07 of 2026)
         // Feb 10 = Mon of KW07, Feb 14 = Fri of KW07
         assert_eq!(weeks.len(), 1);
-        assert_eq!(weeks[0].0, "KW07");
+        assert_eq!(weeks[0].0, "W07");
     }
 
     #[test]
