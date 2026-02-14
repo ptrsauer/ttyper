@@ -220,6 +220,214 @@ pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters)
     }
 }
 
+/// A parsed history row for stats computation.
+struct HistoryRow {
+    date: String,
+    language: String,
+    wpm_raw: f64,
+    wpm_adj: f64,
+    accuracy: f64,
+}
+
+/// Parse filtered CSV data lines into HistoryRow structs.
+fn parse_history_rows(data_lines: &[&str], filters: &Filters) -> Vec<HistoryRow> {
+    data_lines
+        .iter()
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.splitn(10, ',').collect();
+            if fields.len() < 9 || !matches_filters(&fields, filters) {
+                return None;
+            }
+            Some(HistoryRow {
+                date: fields[0][..10].to_string(),
+                language: fields[1].to_string(),
+                wpm_raw: fields[3].parse().unwrap_or(0.0),
+                wpm_adj: fields[4].parse().unwrap_or(0.0),
+                accuracy: fields[5].parse().unwrap_or(0.0),
+            })
+        })
+        .collect()
+}
+
+/// Compute overall statistics from parsed rows.
+fn compute_overall_stats(rows: &[HistoryRow]) -> (f64, f64, f64, String, String, usize) {
+    if rows.is_empty() {
+        return (0.0, 0.0, 0.0, String::new(), String::new(), 0);
+    }
+
+    let avg_raw: f64 = rows.iter().map(|r| r.wpm_raw).sum::<f64>() / rows.len() as f64;
+    let avg_adj: f64 = rows.iter().map(|r| r.wpm_adj).sum::<f64>() / rows.len() as f64;
+    let avg_acc: f64 = rows.iter().map(|r| r.accuracy).sum::<f64>() / rows.len() as f64;
+    let first_date = rows.first().map(|r| r.date.clone()).unwrap_or_default();
+
+    // Most practiced language
+    let mut lang_counts: HashMap<&str, usize> = HashMap::new();
+    for row in rows {
+        *lang_counts.entry(&row.language).or_insert(0) += 1;
+    }
+    let (most_lang, most_count) = lang_counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .unwrap_or(("", 0));
+
+    (avg_raw, avg_adj, avg_acc, first_date, most_lang.to_string(), most_count)
+}
+
+/// Compute stats for rows within a date range (inclusive string comparison on YYYY-MM-DD).
+fn rows_in_range<'a>(rows: &'a [HistoryRow], since: &str, until: &str) -> Vec<&'a HistoryRow> {
+    rows.iter()
+        .filter(|r| r.date.as_str() >= since && r.date.as_str() <= until)
+        .collect()
+}
+
+/// Compute average adjusted WPM for a slice of rows.
+fn avg_wpm(rows: &[&HistoryRow]) -> f64 {
+    if rows.is_empty() {
+        return 0.0;
+    }
+    rows.iter().map(|r| r.wpm_adj).sum::<f64>() / rows.len() as f64
+}
+
+/// Compute average accuracy for a slice of rows.
+fn avg_accuracy(rows: &[&HistoryRow]) -> f64 {
+    if rows.is_empty() {
+        return 0.0;
+    }
+    rows.iter().map(|r| r.accuracy).sum::<f64>() / rows.len() as f64
+}
+
+/// Find best session (highest adjusted WPM) from a slice of rows.
+fn best_session<'a>(rows: &[&'a HistoryRow]) -> Option<(&'a str, f64)> {
+    rows.iter()
+        .max_by(|a, b| a.wpm_adj.partial_cmp(&b.wpm_adj).unwrap())
+        .map(|r| (r.date.as_str(), r.wpm_adj))
+}
+
+/// Compute weekly WPM averages. Returns (ISO week label, avg adjusted WPM) pairs.
+fn weekly_trend(rows: &[HistoryRow]) -> Vec<(String, f64)> {
+    use chrono::NaiveDate;
+
+    let mut week_data: HashMap<String, Vec<f64>> = HashMap::new();
+    for row in rows {
+        if let Ok(date) = NaiveDate::parse_from_str(&row.date, "%Y-%m-%d") {
+            let week = date.format("KW%V").to_string();
+            week_data.entry(week).or_default().push(row.wpm_adj);
+        }
+    }
+
+    let mut weeks: Vec<(String, f64)> = week_data
+        .into_iter()
+        .map(|(week, wpms)| {
+            let avg = wpms.iter().sum::<f64>() / wpms.len() as f64;
+            (week, avg)
+        })
+        .collect();
+    weeks.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Show last 6 weeks max
+    if weeks.len() > 6 {
+        weeks = weeks.split_off(weeks.len() - 6);
+    }
+    weeks
+}
+
+/// Display aggregated statistics from history CSV file.
+pub fn show_stats(history_file: &Path, filters: &Filters) {
+    if !history_file.exists() {
+        println!("No history found at {}", history_file.display());
+        return;
+    }
+
+    let content = fs::read_to_string(history_file).expect("Failed to read history file");
+    let lines: Vec<&str> = content.lines().collect();
+
+    if lines.len() <= 1 {
+        println!("No results recorded yet.");
+        return;
+    }
+
+    let data_lines = &lines[1..];
+    let rows = parse_history_rows(data_lines, filters);
+
+    if rows.is_empty() {
+        println!("No matching results for the given filters.");
+        return;
+    }
+
+    let (avg_raw, avg_adj, avg_acc, first_date, most_lang, most_count) =
+        compute_overall_stats(&rows);
+
+    println!(
+        "Overall ({} tests, since {})",
+        rows.len(),
+        first_date
+    );
+    println!("  Avg WPM: {:.1} (raw: {:.1})", avg_adj, avg_raw);
+    println!("  Avg Accuracy: {:.1}%", avg_acc);
+    if rows.len() > 1 {
+        println!(
+            "  Most practiced: {} ({} tests)",
+            most_lang, most_count
+        );
+    }
+
+    // Last 7 days stats
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let seven_days_ago = (chrono::Local::now() - chrono::Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+    let fourteen_days_ago = (chrono::Local::now() - chrono::Duration::days(14))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let recent = rows_in_range(&rows, &seven_days_ago, &today);
+    if !recent.is_empty() {
+        let recent_wpm = avg_wpm(&recent);
+        let recent_acc = avg_accuracy(&recent);
+
+        println!(
+            "\nLast 7 days ({} tests)",
+            recent.len()
+        );
+        // Delta vs prior week
+        let prior = rows_in_range(&rows, &fourteen_days_ago, &seven_days_ago);
+        if !prior.is_empty() {
+            let prior_wpm = avg_wpm(&prior);
+            let delta = recent_wpm - prior_wpm;
+            let sign = if delta >= 0.0 { "+" } else { "" };
+            println!(
+                "  Avg WPM: {:.1} ({}{:.1} vs prior week)",
+                recent_wpm, sign, delta
+            );
+        } else {
+            println!("  Avg WPM: {:.1}", recent_wpm);
+        }
+        println!("  Avg Accuracy: {:.1}%", recent_acc);
+        if let Some((date, wpm)) = best_session(&recent) {
+            println!("  Best session: {:.1} WPM on {}", wpm, date);
+        }
+    }
+
+    // Weekly trend
+    let weeks = weekly_trend(&rows);
+    if weeks.len() >= 2 {
+        let trend_arrow = if weeks.last().unwrap().1 > weeks[weeks.len() - 2].1 {
+            " ^"
+        } else if weeks.last().unwrap().1 < weeks[weeks.len() - 2].1 {
+            " v"
+        } else {
+            ""
+        };
+        println!("\nWeekly Trend (Adj WPM):");
+        let trend_str: String = weeks
+            .iter()
+            .map(|(week, wpm)| format!("  {}: {:.1}", week, wpm))
+            .collect::<Vec<_>>()
+            .join("  ");
+        println!("{}{}", trend_str, trend_arrow);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,5 +780,78 @@ mod tests {
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 1);
         assert!(rows[0].starts_with("2026-02-14"));
+    }
+
+    // --- Stats aggregation ---
+
+    #[test]
+    fn test_parse_history_rows() {
+        let lines = sample_csv_lines();
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        assert_eq!(rows.len(), 5);
+        assert_eq!(rows[0].date, "2026-02-10");
+        assert_eq!(rows[0].language, "english");
+        assert!((rows[0].wpm_raw - 72.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_history_rows_with_language_filter() {
+        let lines = sample_csv_lines();
+        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        let rows = parse_history_rows(&lines, &filters);
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|r| r.language == "peter1000"));
+    }
+
+    #[test]
+    fn test_compute_overall_stats() {
+        let lines = sample_csv_lines();
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        let (avg_raw, avg_adj, avg_acc, first_date, most_lang, most_count) =
+            compute_overall_stats(&rows);
+
+        // (72 + 75 + 78 + 80 + 82) / 5 = 77.4
+        assert!((avg_raw - 77.4).abs() < 0.01);
+        // (68.4 + 71.2 + 74.1 + 76.0 + 77.9) / 5 = 73.52
+        assert!((avg_adj - 73.52).abs() < 0.01);
+        assert!((avg_acc - 95.0).abs() < 0.01);
+        assert_eq!(first_date, "2026-02-10");
+        assert_eq!(most_lang, "peter1000");
+        assert_eq!(most_count, 3);
+    }
+
+    #[test]
+    fn test_compute_overall_stats_empty() {
+        let (avg_raw, _, _, _, _, _) = compute_overall_stats(&[]);
+        assert!((avg_raw - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_weekly_trend() {
+        let lines = sample_csv_lines();
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        let weeks = weekly_trend(&rows);
+
+        assert!(!weeks.is_empty());
+        // All dates are in the same week (KW07 of 2026)
+        // Feb 10 = Mon of KW07, Feb 14 = Fri of KW07
+        assert_eq!(weeks.len(), 1);
+        assert_eq!(weeks[0].0, "KW07");
+    }
+
+    #[test]
+    fn test_weekly_trend_multiple_weeks() {
+        let lines = vec![
+            "2026-01-27 10:00:00,english,50,70.0,66.5,95.0,190,200,,",
+            "2026-02-03 10:00:00,english,50,75.0,71.2,95.0,190,200,,",
+            "2026-02-10 10:00:00,english,50,80.0,76.0,95.0,190,200,,",
+        ];
+        let rows = parse_history_rows(&lines, &NO_FILTERS);
+        let weeks = weekly_trend(&rows);
+
+        assert_eq!(weeks.len(), 3);
+        // Should be sorted chronologically
+        assert!(weeks[0].1 < weeks[1].1);
+        assert!(weeks[1].1 < weeks[2].1);
     }
 }

@@ -86,6 +86,10 @@ struct Opt {
     #[arg(long, value_name = "DATE")]
     until: Option<String>,
 
+    /// Show aggregated statistics instead of raw history
+    #[arg(long)]
+    stats: bool,
+
     /// Disable saving results to history
     #[arg(long)]
     no_save: bool,
@@ -285,10 +289,11 @@ fn main() -> io::Result<()> {
     let has_history_filters = opt.last.is_some()
         || opt.history_lang.is_some()
         || opt.since.is_some()
-        || opt.until.is_some();
+        || opt.until.is_some()
+        || opt.stats;
 
     if has_history_filters && !opt.history {
-        eprintln!("Error: --last, --history-lang, --since, and --until require --history flag");
+        eprintln!("Error: --last, --history-lang, --since, --until, and --stats require --history flag");
         return Ok(());
     }
 
@@ -316,7 +321,11 @@ fn main() -> io::Result<()> {
             since: opt.since.as_deref(),
             until: opt.until.as_deref(),
         };
-        history::show_history(&opt.history_file(), opt.last, &filters);
+        if opt.stats {
+            history::show_stats(&opt.history_file(), &filters);
+        } else {
+            history::show_history(&opt.history_file(), opt.last, &filters);
+        }
         return Ok(());
     }
 
