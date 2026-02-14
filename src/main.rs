@@ -99,7 +99,11 @@ impl Opt {
                         .collect()
                 };
 
-                Ok(lines.iter().map(String::from).collect())
+                Ok(lines
+                    .iter()
+                    .flat_map(|line| line.split_whitespace().map(String::from))
+                    .filter(|w| !w.is_empty())
+                    .collect())
             }
             None => {
                 let lang_name = self
