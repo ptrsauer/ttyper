@@ -146,7 +146,7 @@ pub fn show_history(history_file: &Path, last: Option<usize>) {
         println!("{}", row);
     }
 
-    if shown < total {
+    if last.is_some() {
         println!(
             "\nShowing last {} of {} results. History file: {}",
             shown, total, history_file.display()

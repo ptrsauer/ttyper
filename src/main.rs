@@ -265,6 +265,11 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    if opt.last.is_some() && !opt.history {
+        eprintln!("Error: --last requires --history flag");
+        return Ok(());
+    }
+
     if opt.history {
         history::show_history(&opt.history_file(), opt.last);
         return Ok(());
