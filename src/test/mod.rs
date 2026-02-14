@@ -73,7 +73,9 @@ impl Test {
 
         let word = &mut self.words[self.current_word];
         match key.code {
-            KeyCode::Char(' ') | KeyCode::Enter => {
+            KeyCode::Char(' ') | KeyCode::Enter
+                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
                 if word.text.chars().nth(word.progress.len()) == Some(' ') {
                     word.progress.push(' ');
                     word.events.push(TestEvent {
@@ -311,6 +313,42 @@ mod tests {
         assert_eq!(
             test.words[0].progress, "H",
             "Shift+letter should still type the uppercase character"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_letter_is_ignored() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        type_string(&mut test, "he");
+
+        let ctrl_shift_a = KeyEvent {
+            code: KeyCode::Char('A'),
+            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        };
+        test.handle_key(ctrl_shift_a);
+        assert_eq!(
+            test.words[0].progress, "he",
+            "Ctrl+Shift+A should not type a character"
+        );
+    }
+
+    #[test]
+    fn ctrl_space_does_not_advance_word() {
+        let mut test = Test::new(
+            vec!["ab".to_string(), "cd".to_string()],
+            true,
+            false,
+        );
+        type_string(&mut test, "ab");
+        assert_eq!(test.current_word, 0);
+
+        // Ctrl+Space should NOT advance to next word
+        test.handle_key(press_ctrl(KeyCode::Char(' ')));
+        assert_eq!(
+            test.current_word, 0,
+            "Ctrl+Space should not advance to the next word"
         );
     }
 
