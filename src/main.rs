@@ -102,7 +102,6 @@ impl Opt {
                 Ok(lines
                     .iter()
                     .flat_map(|line| line.split_whitespace().map(String::from))
-                    .filter(|w| !w.is_empty())
                     .collect())
             }
             None => {
