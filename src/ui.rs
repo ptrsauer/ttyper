@@ -282,9 +282,14 @@ impl ThemedWidget for &results::Results {
             .margin(1) // Graph looks tremendously better with just a little margin
             .constraints([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)])
             .split(chunks[0]);
+        let has_slow_words = !self.slow_words.is_empty();
         let info_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
+            .constraints(if has_slow_words {
+                vec![Constraint::Ratio(1, 3), Constraint::Ratio(1, 3), Constraint::Ratio(1, 3)]
+            } else {
+                vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]
+            })
             .split(res_chunks[0]);
 
         let msg = match (self.slow_words.is_empty(), self.missed_words.is_empty()) {
@@ -364,6 +369,24 @@ impl ThemedWidget for &results::Results {
                 .border_style(theme.results_worst_keys_border),
         );
         worst.render(info_chunks[1], buf);
+
+        if has_slow_words {
+            let mut slow_text = Text::styled("", theme.results_worst_keys);
+            slow_text.extend(
+                self.slow_words
+                    .iter()
+                    .take(5)
+                    .map(|w| Line::from(format!("- {}", w))),
+            );
+            let slow = Paragraph::new(slow_text).block(
+                Block::default()
+                    .title(Span::styled("Slow Words", theme.title))
+                    .borders(Borders::ALL)
+                    .border_type(theme.border_type)
+                    .border_style(theme.results_worst_keys_border),
+            );
+            slow.render(info_chunks[2], buf);
+        }
 
         let wpm_sma: Vec<(f64, f64)> = self
             .timing
