@@ -384,23 +384,29 @@ mod tests {
 
         // "fast" — 4 chars in 0.4s = 0.1s/char
         for (i, c) in "fast".chars().enumerate() {
-            test.words[0]
-                .events
-                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+            test.words[0].events.push(make_timed_event(
+                c,
+                true,
+                now + std::time::Duration::from_millis(i as u64 * 100),
+            ));
         }
 
         // "slow" — 4 chars in 2.0s = 0.5s/char
         for (i, c) in "slow".chars().enumerate() {
-            test.words[1]
-                .events
-                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 500)));
+            test.words[1].events.push(make_timed_event(
+                c,
+                true,
+                now + std::time::Duration::from_millis(i as u64 * 500),
+            ));
         }
 
         // "mid" — 3 chars in 0.6s = 0.2s/char
         for (i, c) in "mid".chars().enumerate() {
-            test.words[2]
-                .events
-                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 200)));
+            test.words[2].events.push(make_timed_event(
+                c,
+                true,
+                now + std::time::Duration::from_millis(i as u64 * 200),
+            ));
         }
 
         let slow = calc_slow_words(&test);
@@ -420,43 +426,45 @@ mod tests {
 
         // "correct" — typed correctly
         for (i, c) in "correct".chars().enumerate() {
-            test.words[0]
-                .events
-                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+            test.words[0].events.push(make_timed_event(
+                c,
+                true,
+                now + std::time::Duration::from_millis(i as u64 * 100),
+            ));
         }
 
         // "wrong" — has an error event (should be excluded)
-        test.words[1]
-            .events
-            .push(make_timed_event('w', true, now));
-        test.words[1]
-            .events
-            .push(make_timed_event('x', false, now + std::time::Duration::from_millis(500)));
+        test.words[1].events.push(make_timed_event('w', true, now));
+        test.words[1].events.push(make_timed_event(
+            'x',
+            false,
+            now + std::time::Duration::from_millis(500),
+        ));
 
         let slow = calc_slow_words(&test);
-        assert_eq!(slow.len(), 1, "Only correctly-typed words should be included");
+        assert_eq!(
+            slow.len(),
+            1,
+            "Only correctly-typed words should be included"
+        );
         assert_eq!(slow[0], "correct");
     }
 
     #[test]
     fn slow_words_skips_single_event_words() {
         let now = Instant::now();
-        let mut test = Test::new(
-            vec!["a".to_string(), "hello".to_string()],
-            true,
-            false,
-        );
+        let mut test = Test::new(vec!["a".to_string(), "hello".to_string()], true, false);
 
         // "a" — only 1 event (can't measure timing)
-        test.words[0]
-            .events
-            .push(make_timed_event('a', true, now));
+        test.words[0].events.push(make_timed_event('a', true, now));
 
         // "hello" — 5 events
         for (i, c) in "hello".chars().enumerate() {
-            test.words[1]
-                .events
-                .push(make_timed_event(c, true, now + std::time::Duration::from_millis(i as u64 * 100)));
+            test.words[1].events.push(make_timed_event(
+                c,
+                true,
+                now + std::time::Duration::from_millis(i as u64 * 100),
+            ));
         }
 
         let slow = calc_slow_words(&test);
@@ -491,12 +499,19 @@ mod tests {
 
         let results = Results::from(&test);
 
-        assert_eq!(results.words, words, "Results should preserve the original word list");
+        assert_eq!(
+            results.words, words,
+            "Results should preserve the original word list"
+        );
     }
 
     #[test]
     fn results_preserve_word_order() {
-        let words = vec!["zebra".to_string(), "apple".to_string(), "mango".to_string()];
+        let words = vec![
+            "zebra".to_string(),
+            "apple".to_string(),
+            "mango".to_string(),
+        ];
         let test = Test::new(words.clone(), true, false);
 
         let results = Results::from(&test);
@@ -519,7 +534,10 @@ mod tests {
         test.words[0].events.push(make_event('c', true));
 
         let results = Results::from(&test);
-        assert!(!results.dwell.has_data, "No release events → has_data should be false");
+        assert!(
+            !results.dwell.has_data,
+            "No release events → has_data should be false"
+        );
         assert!(results.dwell.overall_avg_ms.is_none());
         assert!(results.dwell.per_key.is_empty());
     }
@@ -531,10 +549,15 @@ mod tests {
 
         // 'a' held for 80ms, 'b' held for 120ms
         test.words[0].events.push(make_dwell_event(
-            'a', true, now, now + std::time::Duration::from_millis(80),
+            'a',
+            true,
+            now,
+            now + std::time::Duration::from_millis(80),
         ));
         test.words[0].events.push(make_dwell_event(
-            'b', true, now + std::time::Duration::from_millis(100),
+            'b',
+            true,
+            now + std::time::Duration::from_millis(100),
             now + std::time::Duration::from_millis(220),
         ));
 
@@ -555,13 +578,20 @@ mod tests {
 
         // 'a' has release (100ms), 'b' does not, 'c' has release (50ms)
         test.words[0].events.push(make_dwell_event(
-            'a', true, now, now + std::time::Duration::from_millis(100),
+            'a',
+            true,
+            now,
+            now + std::time::Duration::from_millis(100),
         ));
         test.words[0].events.push(make_timed_event(
-            'b', true, now + std::time::Duration::from_millis(150),
+            'b',
+            true,
+            now + std::time::Duration::from_millis(150),
         ));
         test.words[0].events.push(make_dwell_event(
-            'c', true, now + std::time::Duration::from_millis(200),
+            'c',
+            true,
+            now + std::time::Duration::from_millis(200),
             now + std::time::Duration::from_millis(250),
         ));
 
@@ -581,10 +611,15 @@ mod tests {
 
         // Two presses of 'a': 60ms and 100ms → avg 80ms
         test.words[0].events.push(make_dwell_event(
-            'a', true, now, now + std::time::Duration::from_millis(60),
+            'a',
+            true,
+            now,
+            now + std::time::Duration::from_millis(60),
         ));
         test.words[0].events.push(make_dwell_event(
-            'a', true, now + std::time::Duration::from_millis(100),
+            'a',
+            true,
+            now + std::time::Duration::from_millis(100),
             now + std::time::Duration::from_millis(200),
         ));
 
@@ -592,6 +627,10 @@ mod tests {
         assert_eq!(results.dwell.per_key.len(), 1);
         let (ch, avg_ms) = results.dwell.per_key[0];
         assert_eq!(ch, 'a');
-        assert!((avg_ms - 80.0).abs() < 1.0, "Expected ~80ms, got {}", avg_ms);
+        assert!(
+            (avg_ms - 80.0).abs() < 1.0,
+            "Expected ~80ms, got {}",
+            avg_ms
+        );
     }
 }

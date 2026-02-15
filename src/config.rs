@@ -87,8 +87,7 @@ impl Default for Theme {
         Self {
             default: Style::default(),
 
-            title: Style::default()
-                .add_modifier(Modifier::BOLD),
+            title: Style::default().add_modifier(Modifier::BOLD),
 
             input_border: Style::default().fg(Color::Cyan),
             prompt_border: Style::default().fg(Color::Green),
