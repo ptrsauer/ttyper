@@ -73,6 +73,10 @@ struct Opt {
     #[arg(long)]
     case_insensitive: bool,
 
+    /// Disable backspace/delete during test
+    #[arg(long)]
+    no_backspace: bool,
+
     /// Show history of past results
     #[arg(long)]
     history: bool,
@@ -387,6 +391,7 @@ fn main() -> io::Result<()> {
         !opt.no_backtrack,
         opt.sudden_death,
         opt.case_insensitive,
+        opt.no_backspace,
     ));
 
     state.render_into(&mut terminal, &config)?;
@@ -436,6 +441,7 @@ fn main() -> io::Result<()> {
                                     !opt.no_backtrack,
                                     opt.sudden_death,
                                     opt.case_insensitive,
+                                    opt.no_backspace,
                                 ));
                             }
                             _ => continue,
@@ -470,6 +476,7 @@ fn main() -> io::Result<()> {
                             !opt.no_backtrack,
                             opt.sudden_death,
                             opt.case_insensitive,
+                            opt.no_backspace,
                         ));
                     }
                     _ => continue,
@@ -494,6 +501,7 @@ fn main() -> io::Result<()> {
                         !opt.no_backtrack,
                         opt.sudden_death,
                         opt.case_insensitive,
+                        opt.no_backspace,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -510,6 +518,7 @@ fn main() -> io::Result<()> {
                         !opt.no_backtrack,
                         opt.sudden_death,
                         opt.case_insensitive,
+                        opt.no_backspace,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -532,6 +541,7 @@ fn main() -> io::Result<()> {
                         !opt.no_backtrack,
                         opt.sudden_death,
                         opt.case_insensitive,
+                        opt.no_backspace,
                     ));
                 }
                 Event::Key(KeyEvent {

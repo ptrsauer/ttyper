@@ -91,6 +91,7 @@ Options:
       --no-backtrack          Disable backtracking to completed words
       --sudden-death          Enable sudden death mode to restart on first error
       --case-insensitive      Ignore case when comparing typed input
+      --no-backspace          Disable backspace/delete during test
       --history               Show history of past results
       --last <N>              Show only the last N history entries
       --history-lang <LANG>   Filter history by language
