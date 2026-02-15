@@ -10,8 +10,8 @@ use clap::Parser;
 use crossterm::{
     self, cursor,
     event::{
-        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
-        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute, terminal,
 };
@@ -109,9 +109,8 @@ impl Opt {
                         .map_while(Result::ok)
                         .collect()
                 } else {
-                    let file = fs::File::open(path).map_err(|e| {
-                        format!("Error: Cannot read '{}': {}", path.display(), e)
-                    })?;
+                    let file = fs::File::open(path)
+                        .map_err(|e| format!("Error: Cannot read '{}': {}", path.display(), e))?;
                     io::BufReader::new(file)
                         .lines()
                         .map_while(Result::ok)
@@ -162,7 +161,10 @@ impl Opt {
                                 lang_file.display()
                             )
                         } else {
-                            format!("Error: Language '{}' has invalid UTF-8 encoding.", lang_name)
+                            format!(
+                                "Error: Language '{}' has invalid UTF-8 encoding.",
+                                lang_name
+                            )
                         }
                     })?
                     .lines()
@@ -269,7 +271,6 @@ impl State {
     }
 }
 
-
 fn main() -> io::Result<()> {
     let opt = Opt::parse();
     if opt.debug {
@@ -296,7 +297,9 @@ fn main() -> io::Result<()> {
         || opt.stats;
 
     if has_history_filters && !opt.history {
-        eprintln!("Error: --last, --history-lang, --since, --until, and --stats require --history flag");
+        eprintln!(
+            "Error: --last, --history-lang, --since, --until, and --stats require --history flag"
+        );
         return Ok(());
     }
 
@@ -332,8 +335,6 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
-    let backend = CrosstermBackend::new(io::stdout());
-    let mut terminal = Terminal::new(backend)?;
     let contents = match opt.gen_contents() {
         Ok(c) => c,
         Err(msg) => {
@@ -359,6 +360,8 @@ fn main() -> io::Result<()> {
         }
     }
 
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
     terminal::enable_raw_mode()?;
     execute!(
         io::stdout(),
@@ -398,7 +401,12 @@ fn main() -> io::Result<()> {
                 State::Test(ref test) => {
                     let results = Results::from(test);
                     if !opt.no_save {
-                        history::save_results(&opt.history_file(), &opt.effective_language(), opt.words.get(), &results);
+                        history::save_results(
+                            &opt.history_file(),
+                            &opt.effective_language(),
+                            opt.words.get(),
+                            &results,
+                        );
                     }
                     state = State::Results(results);
                 }
@@ -427,7 +435,12 @@ fn main() -> io::Result<()> {
                         if test.complete {
                             let results = Results::from(&*test);
                             if !opt.no_save {
-                                history::save_results(&opt.history_file(), &opt.effective_language(), opt.words.get(), &results);
+                                history::save_results(
+                                    &opt.history_file(),
+                                    &opt.effective_language(),
+                                    opt.words.get(),
+                                    &results,
+                                );
                             }
                             state = State::Results(results);
                         }
@@ -440,18 +453,13 @@ fn main() -> io::Result<()> {
                     kind: KeyEventKind::Press,
                     modifiers: KeyModifiers::NONE,
                     ..
-                }) => {
-                    match opt.gen_contents() {
-                        Ok(contents) if !contents.is_empty() => {
-                            state = State::Test(Test::new(
-                                contents,
-                                !opt.no_backtrack,
-                                opt.sudden_death,
-                            ));
-                        }
-                        _ => continue,
+                }) => match opt.gen_contents() {
+                    Ok(contents) if !contents.is_empty() => {
+                        state =
+                            State::Test(Test::new(contents, !opt.no_backtrack, opt.sudden_death));
                     }
-                }
+                    _ => continue,
+                },
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('p'),
                     kind: KeyEventKind::Press,

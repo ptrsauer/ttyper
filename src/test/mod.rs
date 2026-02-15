@@ -175,7 +175,11 @@ impl Test {
         };
 
         // Track pending press for dwell time measurement (after match borrow is dropped)
-        if self.words.get(word_idx).map_or(false, |w| w.events.len() > events_before) {
+        if self
+            .words
+            .get(word_idx)
+            .is_some_and(|w| w.events.len() > events_before)
+        {
             self.pending_presses
                 .insert(key.code, (word_idx, self.words[word_idx].events.len() - 1));
         }
@@ -370,11 +374,7 @@ mod tests {
 
     #[test]
     fn ctrl_space_does_not_advance_word() {
-        let mut test = Test::new(
-            vec!["ab".to_string(), "cd".to_string()],
-            true,
-            false,
-        );
+        let mut test = Test::new(vec!["ab".to_string(), "cd".to_string()], true, false);
         type_string(&mut test, "ab");
         assert_eq!(test.current_word, 0);
 

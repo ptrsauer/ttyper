@@ -45,12 +45,7 @@ pub fn format_worst_keys(per_key: &HashMap<KeyEvent, Fraction>) -> String {
 }
 
 /// Format a single CSV data line. Timestamp is passed in to keep the function pure/testable.
-pub fn format_csv_line(
-    timestamp: &str,
-    language: &str,
-    words: usize,
-    results: &Results,
-) -> String {
+pub fn format_csv_line(timestamp: &str, language: &str, words: usize, results: &Results) -> String {
     let accuracy = f64::from(results.accuracy.overall);
     let (raw_wpm, adjusted_wpm) = calculate_wpms(results.timing.overall_cps, accuracy);
     let worst_str = format_worst_keys(&results.accuracy.per_key);
@@ -204,8 +199,8 @@ pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters)
     }
 
     println!(
-        "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} {}",
-        "Date", "Language", "Words", "Raw WPM", "Adj WPM", "Acc %", "Worst Keys"
+        "{:<20} {:<15} {:>5} {:>8} {:>8} {:>8} Worst Keys",
+        "Date", "Language", "Words", "Raw WPM", "Adj WPM", "Acc %"
     );
     println!("{}", "-".repeat(90));
 
@@ -216,12 +211,15 @@ pub fn show_history(history_file: &Path, last: Option<usize>, filters: &Filters)
     if has_filters {
         println!(
             "\nShowing {} of {} results. History file: {}",
-            shown, total, history_file.display()
+            shown,
+            total,
+            history_file.display()
         );
     } else {
         println!(
             "\n{} results total. History file: {}",
-            total, history_file.display()
+            total,
+            history_file.display()
         );
     }
 }
@@ -278,7 +276,14 @@ fn compute_overall_stats(rows: &[HistoryRow]) -> (f64, f64, f64, String, String,
         .max_by_key(|(_, count)| *count)
         .unwrap_or(("", 0));
 
-    (avg_raw, avg_adj, avg_acc, first_date, most_lang.to_string(), most_count)
+    (
+        avg_raw,
+        avg_adj,
+        avg_acc,
+        first_date,
+        most_lang.to_string(),
+        most_count,
+    )
 }
 
 /// Compute stats for rows within a date range (inclusive string comparison on YYYY-MM-DD).
@@ -365,17 +370,10 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
     let (avg_raw, avg_adj, avg_acc, first_date, most_lang, most_count) =
         compute_overall_stats(&rows);
 
-    println!(
-        "Overall ({} tests, since {})",
-        rows.len(),
-        first_date
-    );
+    println!("Overall ({} tests, since {})", rows.len(), first_date);
     println!("  Avg WPM: {:.1} (raw: {:.1})", avg_adj, avg_raw);
     println!("  Avg Accuracy: {:.1}%", avg_acc);
-    println!(
-        "  Most practiced: {} ({} tests)",
-        most_lang, most_count
-    );
+    println!("  Most practiced: {} ({} tests)", most_lang, most_count);
 
     // Overall dwell stats (if any rows have dwell data)
     let dwell_values: Vec<f64> = rows.iter().filter_map(|r| r.avg_dwell_ms).collect();
@@ -401,10 +399,7 @@ pub fn show_stats(history_file: &Path, filters: &Filters) {
         let recent_wpm = avg_wpm(&recent);
         let recent_acc = avg_accuracy(&recent);
 
-        println!(
-            "\nLast 7 days ({} tests)",
-            recent.len()
-        );
+        println!("\nLast 7 days ({} tests)", recent.len());
         // Delta vs prior week (exclusive upper bound to avoid double-counting)
         let prior = rows_in_range(&rows, &fourteen_days_ago, &eight_days_ago);
         if !prior.is_empty() {
@@ -711,7 +706,11 @@ mod tests {
     #[test]
     fn test_filter_by_language() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        let filters = Filters {
+            language: Some("peter1000"),
+            since: None,
+            until: None,
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 3);
         assert!(rows[0].starts_with("2026-02-12"));
@@ -721,7 +720,11 @@ mod tests {
     #[test]
     fn test_filter_by_language_no_match() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: Some("german"), since: None, until: None };
+        let filters = Filters {
+            language: Some("german"),
+            since: None,
+            until: None,
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 0);
     }
@@ -731,7 +734,11 @@ mod tests {
     #[test]
     fn test_filter_since() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: None, since: Some("2026-02-13"), until: None };
+        let filters = Filters {
+            language: None,
+            since: Some("2026-02-13"),
+            until: None,
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 2);
         assert!(rows[0].starts_with("2026-02-13"));
@@ -741,7 +748,11 @@ mod tests {
     #[test]
     fn test_filter_until() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: None, since: None, until: Some("2026-02-11") };
+        let filters = Filters {
+            language: None,
+            since: None,
+            until: Some("2026-02-11"),
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 2);
         assert!(rows[0].starts_with("2026-02-10"));
@@ -751,7 +762,11 @@ mod tests {
     #[test]
     fn test_filter_date_range() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: None, since: Some("2026-02-11"), until: Some("2026-02-13") };
+        let filters = Filters {
+            language: None,
+            since: Some("2026-02-11"),
+            until: Some("2026-02-13"),
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 3);
         assert!(rows[0].starts_with("2026-02-11"));
@@ -763,7 +778,11 @@ mod tests {
     #[test]
     fn test_filter_language_and_date_range() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: Some("peter1000"), since: Some("2026-02-13"), until: None };
+        let filters = Filters {
+            language: Some("peter1000"),
+            since: Some("2026-02-13"),
+            until: None,
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 2);
         assert!(rows[0].starts_with("2026-02-13"));
@@ -773,7 +792,11 @@ mod tests {
     #[test]
     fn test_filter_with_last() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        let filters = Filters {
+            language: Some("peter1000"),
+            since: None,
+            until: None,
+        };
         // 3 peter1000 entries, take last 1
         let rows = format_history_rows(&lines, Some(1), &filters);
         assert_eq!(rows.len(), 1);
@@ -783,7 +806,11 @@ mod tests {
     #[test]
     fn test_filter_same_day_range() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: None, since: Some("2026-02-12"), until: Some("2026-02-12") };
+        let filters = Filters {
+            language: None,
+            since: Some("2026-02-12"),
+            until: Some("2026-02-12"),
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 1);
         assert!(rows[0].starts_with("2026-02-12"));
@@ -814,7 +841,11 @@ mod tests {
             "short,english,50,72.0,68.4,95.0,190,200,a:90%,",
             "2026-02-14 10:00:00,english,50,75.0,71.2,95.0,190,200,,",
         ];
-        let filters = Filters { language: None, since: Some("2026-02-01"), until: None };
+        let filters = Filters {
+            language: None,
+            since: Some("2026-02-01"),
+            until: None,
+        };
         let rows = format_history_rows(&lines, None, &filters);
         assert_eq!(rows.len(), 1);
         assert!(rows[0].starts_with("2026-02-14"));
@@ -835,7 +866,11 @@ mod tests {
     #[test]
     fn test_parse_history_rows_with_language_filter() {
         let lines = sample_csv_lines();
-        let filters = Filters { language: Some("peter1000"), since: None, until: None };
+        let filters = Filters {
+            language: Some("peter1000"),
+            since: None,
+            until: None,
+        };
         let rows = parse_history_rows(&lines, &filters);
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|r| r.language == "peter1000"));
@@ -905,9 +940,7 @@ mod tests {
 
     #[test]
     fn test_parse_new_csv_with_dwell() {
-        let lines = vec![
-            "2026-02-14 10:00:00,english,50,82.0,77.9,95.0,380,400,,world,98.5",
-        ];
+        let lines = vec!["2026-02-14 10:00:00,english,50,82.0,77.9,95.0,380,400,,world,98.5"];
         let rows = parse_history_rows(&lines, &NO_FILTERS);
         assert_eq!(rows.len(), 1);
         assert!((rows[0].avg_dwell_ms.unwrap() - 98.5).abs() < 0.01);
