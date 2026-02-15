@@ -11,19 +11,29 @@ pub fn default_test(words: Vec<String>) -> Test {
 }
 
 /// Create a test with case-insensitive comparison enabled.
-/// All other settings use defaults (backtracking on, no sudden death, backspace allowed).
+/// All other settings match [`default_test`]: backtracking on, no sudden death,
+/// backspace allowed, no look-ahead limit.
 pub fn case_insensitive_test(words: Vec<String>) -> Test {
     Test::new(words, true, false, true, false, None)
 }
 
-/// Create a test with backspace/delete disabled.
-/// All other settings use defaults (backtracking on, no sudden death, case-sensitive).
+/// Create a test with backspace/delete disabled (Backspace, Ctrl+H, Ctrl+W all blocked).
+/// All other settings match [`default_test`]: backtracking on, no sudden death,
+/// case-sensitive, no look-ahead limit.
 pub fn no_backspace_test(words: Vec<String>) -> Test {
     Test::new(words, true, false, false, true, None)
 }
 
-/// Create a test with look-ahead limiting (only N upcoming words visible).
-/// All other settings use defaults.
+/// Create a test with backtracking between words disabled.
+/// All other settings match [`default_test`]: no sudden death, case-sensitive,
+/// backspace allowed, no look-ahead limit.
+pub fn no_backtrack_test(words: Vec<String>) -> Test {
+    Test::new(words, false, false, false, false, None)
+}
+
+/// Create a test with look-ahead limiting (only the next `n` upcoming words visible).
+/// Uses `Some(n)` internally — for no limit, use [`default_test`] instead.
+/// All other settings match [`default_test`].
 pub fn look_ahead_test(words: Vec<String>, n: usize) -> Test {
     Test::new(words, true, false, false, false, Some(n))
 }
@@ -59,6 +69,16 @@ mod tests {
         assert!(!test.sudden_death_enabled);
         assert!(!test.case_insensitive);
         assert!(test.no_backspace);
+        assert_eq!(test.look_ahead, None);
+    }
+
+    #[test]
+    fn no_backtrack_test_has_correct_settings() {
+        let test = no_backtrack_test(vec!["hello".to_string()]);
+        assert!(!test.backtracking_enabled);
+        assert!(!test.sudden_death_enabled);
+        assert!(!test.case_insensitive);
+        assert!(!test.no_backspace);
         assert_eq!(test.look_ahead, None);
     }
 

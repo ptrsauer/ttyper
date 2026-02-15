@@ -337,14 +337,7 @@ mod tests {
 
     #[test]
     fn ctrl_h_no_backtrack_when_disabled() {
-        let mut test = Test::new(
-            vec!["ab".to_string(), "cd".to_string()],
-            false, // backtracking disabled
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = no_backtrack_test(vec!["ab".to_string(), "cd".to_string()]);
         type_string(&mut test, "ab");
         test.handle_key(press(KeyCode::Char(' ')));
         assert_eq!(test.current_word, 1);
