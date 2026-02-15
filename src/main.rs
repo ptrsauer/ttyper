@@ -77,6 +77,14 @@ struct Opt {
     #[arg(long)]
     no_backspace: bool,
 
+    /// Don't shuffle word order
+    #[arg(long)]
+    no_shuffle: bool,
+
+    /// Use entire word list (ignore --words limit)
+    #[arg(long)]
+    no_limit: bool,
+
     /// Show history of past results
     #[arg(long)]
     history: bool,
@@ -177,15 +185,23 @@ impl Opt {
                     })?
                     .lines()
                     .collect();
-                language.shuffle(&mut rng);
+                if !self.no_shuffle {
+                    language.shuffle(&mut rng);
+                }
 
-                let mut contents: Vec<_> = language
-                    .into_iter()
-                    .cycle()
-                    .take(self.words.get())
-                    .map(ToOwned::to_owned)
-                    .collect();
-                contents.shuffle(&mut rng);
+                let mut contents: Vec<_> = if self.no_limit {
+                    language.into_iter().map(ToOwned::to_owned).collect()
+                } else {
+                    language
+                        .into_iter()
+                        .cycle()
+                        .take(self.words.get())
+                        .map(ToOwned::to_owned)
+                        .collect()
+                };
+                if !self.no_shuffle {
+                    contents.shuffle(&mut rng);
+                }
 
                 Ok(contents)
             }

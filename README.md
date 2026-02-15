@@ -92,6 +92,8 @@ Options:
       --sudden-death          Enable sudden death mode to restart on first error
       --case-insensitive      Ignore case when comparing typed input
       --no-backspace          Disable backspace/delete during test
+      --no-shuffle            Don't shuffle word order
+      --no-limit              Use entire word list (ignore --words limit)
       --history               Show history of past results
       --last <N>              Show only the last N history entries
       --history-lang <LANG>   Filter history by language
