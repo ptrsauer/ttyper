@@ -45,6 +45,17 @@ The original project by [Max Niederman](https://github.com/max-niederman) can be
 
 ## installation
 
+### pre-built binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/ptrsauer/ttyper/releases/latest). Binaries are available for Linux (x86_64, aarch64, i686, arm), macOS (Intel & Apple Silicon), and Windows (x86_64, i686, aarch64).
+
+```bash
+# Example: Linux x86_64
+curl -LO https://github.com/ptrsauer/ttyper/releases/latest/download/ttyper-x86_64-unknown-linux-gnu.tar.gz
+tar xzf ttyper-x86_64-unknown-linux-gnu.tar.gz
+sudo mv ttyper /usr/local/bin/
+```
+
 ### cargo (from GitHub)
 
 ```bash
