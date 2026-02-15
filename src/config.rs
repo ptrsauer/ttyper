@@ -101,7 +101,22 @@ impl KeyMap {
             ("new_test", &self.new_test),
         ];
 
+        let hardcoded_esc = KeyBinding {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::NONE,
+        };
+        let hardcoded_ctrl_c = KeyBinding {
+            code: KeyCode::Char('c'),
+            modifiers: KeyModifiers::CONTROL,
+        };
+
         let mut seen: HashMap<(KeyCode, KeyModifiers), &str> = HashMap::new();
+        seen.insert((hardcoded_esc.code, hardcoded_esc.modifiers), "Esc (exit)");
+        seen.insert(
+            (hardcoded_ctrl_c.code, hardcoded_ctrl_c.modifiers),
+            "Ctrl+C (exit)",
+        );
+
         let mut conflicts = Vec::new();
 
         for (name, binding) in &bindings {
@@ -184,7 +199,7 @@ fn parse_key_code(s: &str) -> Result<KeyCode, String> {
         "Esc" => Ok(KeyCode::Esc),
         "Delete" => Ok(KeyCode::Delete),
         "Space" => Ok(KeyCode::Char(' ')),
-        s if s.len() == 1 => {
+        s if s.chars().count() == 1 => {
             let c = s.chars().next().unwrap();
             Ok(KeyCode::Char(c))
         }
@@ -587,10 +602,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_unicode_char_keybinding() {
+        let kb = parse_keybinding("ü").unwrap();
+        assert_eq!(kb.code, KeyCode::Char('ü'));
+        assert_eq!(kb.modifiers, KeyModifiers::NONE);
+    }
+
+    #[test]
     fn parse_invalid_keybinding() {
         assert!(parse_keybinding("X-q").is_err());
         assert!(parse_keybinding("a-b-c").is_err());
         assert!(parse_keybinding("InvalidKey").is_err());
+        assert!(parse_keybinding("").is_err());
     }
 
     #[test]
@@ -639,9 +662,13 @@ restart = "C-r"
 
     #[test]
     fn keymap_conflict_detection() {
-        let mut km = KeyMap::default();
+        let km = KeyMap::default();
         assert!(km.check_conflicts().is_empty());
+    }
 
+    #[test]
+    fn keymap_conflict_between_actions() {
+        let mut km = KeyMap::default();
         // create a conflict: quit and restart both bound to 'q'
         km.restart = KeyBinding {
             code: KeyCode::Char('q'),
@@ -651,6 +678,30 @@ restart = "C-r"
         assert_eq!(conflicts.len(), 1);
         assert!(conflicts[0].contains("quit"));
         assert!(conflicts[0].contains("restart"));
+    }
+
+    #[test]
+    fn keymap_conflict_with_hardcoded_esc() {
+        let mut km = KeyMap::default();
+        km.quit = KeyBinding {
+            code: KeyCode::Esc,
+            modifiers: KeyModifiers::NONE,
+        };
+        let conflicts = km.check_conflicts();
+        assert_eq!(conflicts.len(), 1);
+        assert!(conflicts[0].contains("Esc (exit)"));
+    }
+
+    #[test]
+    fn keymap_conflict_with_hardcoded_ctrl_c() {
+        let mut km = KeyMap::default();
+        km.restart = KeyBinding {
+            code: KeyCode::Char('c'),
+            modifiers: KeyModifiers::CONTROL,
+        };
+        let conflicts = km.check_conflicts();
+        assert_eq!(conflicts.len(), 1);
+        assert!(conflicts[0].contains("Ctrl+C (exit)"));
     }
 
     #[test]

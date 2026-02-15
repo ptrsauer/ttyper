@@ -220,8 +220,15 @@ impl Opt {
                 .unwrap_or_else(|| self.config_dir().join("config.toml")),
         )
         .map(|bytes| {
-            toml::from_str(str::from_utf8(&bytes).unwrap_or_default())
-                .expect("Configuration was ill-formed.")
+            let s = str::from_utf8(&bytes).unwrap_or_default();
+            match toml::from_str(s) {
+                Ok(config) => config,
+                Err(e) => {
+                    eprintln!("Error in config.toml: {}", e);
+                    eprintln!("Using default configuration.");
+                    Config::default()
+                }
+            }
         })
         .unwrap_or_default()
     }
