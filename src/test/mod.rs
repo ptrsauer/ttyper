@@ -55,17 +55,24 @@ pub struct Test {
     pub complete: bool,
     pub backtracking_enabled: bool,
     pub sudden_death_enabled: bool,
+    pub case_insensitive: bool,
     pending_presses: HashMap<KeyCode, (usize, usize)>,
 }
 
 impl Test {
-    pub fn new(words: Vec<String>, backtracking_enabled: bool, sudden_death_enabled: bool) -> Self {
+    pub fn new(
+        words: Vec<String>,
+        backtracking_enabled: bool,
+        sudden_death_enabled: bool,
+        case_insensitive: bool,
+    ) -> Self {
         Self {
             words: words.into_iter().map(TestWord::from).collect(),
             current_word: 0,
             complete: false,
             backtracking_enabled,
             sudden_death_enabled,
+            case_insensitive,
             pending_presses: HashMap::new(),
         }
     }
@@ -96,7 +103,11 @@ impl Test {
                         release_time: None,
                     })
                 } else if !word.progress.is_empty() || word.text.is_empty() {
-                    let correct = word.text == word.progress;
+                    let correct = if self.case_insensitive {
+                        word.text.to_lowercase() == word.progress.to_lowercase()
+                    } else {
+                        word.text == word.progress
+                    };
                     if self.sudden_death_enabled && !correct {
                         self.reset();
                     } else {
@@ -154,8 +165,19 @@ impl Test {
                 word.progress.clear();
             }
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                word.progress.push(c);
-                let correct = word.text.starts_with(&word.progress[..]);
+                let ch = if self.case_insensitive {
+                    c.to_lowercase().next().unwrap_or(c)
+                } else {
+                    c
+                };
+                word.progress.push(ch);
+                let correct = if self.case_insensitive {
+                    word.text
+                        .to_lowercase()
+                        .starts_with(&word.progress.to_lowercase())
+                } else {
+                    word.text.starts_with(&word.progress[..])
+                };
                 if self.sudden_death_enabled && !correct {
                     self.reset();
                 } else {
@@ -165,7 +187,12 @@ impl Test {
                         key,
                         release_time: None,
                     });
-                    if word.progress == word.text && self.current_word == self.words.len() - 1 {
+                    let words_match = if self.case_insensitive {
+                        word.progress.to_lowercase() == word.text.to_lowercase()
+                    } else {
+                        word.progress == word.text
+                    };
+                    if words_match && self.current_word == self.words.len() - 1 {
                         self.complete = true;
                         self.current_word = 0;
                     }
@@ -252,7 +279,7 @@ mod tests {
 
     #[test]
     fn ctrl_h_deletes_single_character() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "hel");
         assert_eq!(test.words[0].progress, "hel");
 
@@ -268,6 +295,7 @@ mod tests {
         let mut test = Test::new(
             vec!["ab".to_string(), "cd".to_string()],
             true, // backtracking enabled
+            false,
             false,
         );
         // Complete word 1, move to word 2
@@ -289,6 +317,7 @@ mod tests {
             vec!["ab".to_string(), "cd".to_string()],
             false, // backtracking disabled
             false,
+            false,
         );
         type_string(&mut test, "ab");
         test.handle_key(press(KeyCode::Char(' ')));
@@ -304,7 +333,7 @@ mod tests {
 
     #[test]
     fn ctrl_letter_is_ignored() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "he");
         assert_eq!(test.words[0].progress, "he");
 
@@ -325,7 +354,7 @@ mod tests {
 
     #[test]
     fn ctrl_letter_no_event_added() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "he");
         let events_before = test.words[0].events.len();
 
@@ -339,7 +368,7 @@ mod tests {
 
     #[test]
     fn shift_letter_still_types() {
-        let mut test = Test::new(vec!["Hello".to_string()], true, false);
+        let mut test = Test::new(vec!["Hello".to_string()], true, false, false);
 
         let shift_h = KeyEvent {
             code: KeyCode::Char('H'),
@@ -356,7 +385,7 @@ mod tests {
 
     #[test]
     fn ctrl_shift_letter_is_ignored() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "he");
 
         let ctrl_shift_a = KeyEvent {
@@ -374,7 +403,7 @@ mod tests {
 
     #[test]
     fn ctrl_space_does_not_advance_word() {
-        let mut test = Test::new(vec!["ab".to_string(), "cd".to_string()], true, false);
+        let mut test = Test::new(vec!["ab".to_string(), "cd".to_string()], true, false, false);
         type_string(&mut test, "ab");
         assert_eq!(test.current_word, 0);
 
@@ -388,7 +417,7 @@ mod tests {
 
     #[test]
     fn tab_does_not_affect_progress() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "he");
 
         test.handle_key(press(KeyCode::Tab));
@@ -401,7 +430,7 @@ mod tests {
 
     #[test]
     fn ctrl_w_still_clears_entire_word() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false);
+        let mut test = Test::new(vec!["hello".to_string()], true, false, false);
         type_string(&mut test, "hel");
         assert_eq!(test.words[0].progress, "hel");
 
@@ -409,6 +438,74 @@ mod tests {
         assert_eq!(
             test.words[0].progress, "",
             "Ctrl+W should clear the entire word progress"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_lowercase_matches_uppercase_word() {
+        let mut test = Test::new(vec!["Hello".to_string()], true, false, true);
+        type_string(&mut test, "hello");
+        assert_eq!(
+            test.words[0].progress, "hello",
+            "In case-insensitive mode, typed lowercase should be stored as-is"
+        );
+        // Complete the word
+        test.handle_key(press(KeyCode::Char(' ')));
+        assert!(
+            test.complete,
+            "Typing 'hello' for 'Hello' should complete in case-insensitive mode"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_uppercase_matches_lowercase_word() {
+        let mut test = Test::new(vec!["hello".to_string()], true, false, true);
+        let shift_h = KeyEvent {
+            code: KeyCode::Char('H'),
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        };
+        test.handle_key(shift_h);
+        // In case-insensitive mode, uppercase 'H' should be lowercased to 'h'
+        assert_eq!(
+            test.words[0].progress, "h",
+            "In case-insensitive mode, typed uppercase should be stored as lowercase"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_correct_flag_on_events() {
+        let mut test = Test::new(vec!["World".to_string()], true, false, true);
+        type_string(&mut test, "world");
+        // All events should be marked correct (case-insensitive comparison)
+        assert!(
+            test.words[0].events.iter().all(|e| e.correct == Some(true)),
+            "All keystrokes should be marked correct in case-insensitive mode"
+        );
+    }
+
+    #[test]
+    fn case_sensitive_uppercase_mismatch() {
+        let mut test = Test::new(vec!["Hello".to_string()], true, false, false);
+        type_string(&mut test, "hello");
+        test.handle_key(press(KeyCode::Char(' ')));
+        // In case-sensitive mode, 'hello' != 'Hello', so the word event should be incorrect
+        let last_event = test.words[0].events.last().unwrap();
+        assert_eq!(
+            last_event.correct,
+            Some(false),
+            "In case-sensitive mode, 'hello' should not match 'Hello'"
+        );
+    }
+
+    #[test]
+    fn case_insensitive_auto_complete_last_word() {
+        let mut test = Test::new(vec!["ABC".to_string()], true, false, true);
+        type_string(&mut test, "abc");
+        assert!(
+            test.complete,
+            "Typing 'abc' for last word 'ABC' should auto-complete in case-insensitive mode"
         );
     }
 }
