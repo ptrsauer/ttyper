@@ -45,32 +45,18 @@ The original project by [Max Niederman](https://github.com/max-niederman) can be
 
 ## installation
 
-### pre-built binaries
-
-Pre-built binaries are available for most architectures on [GitHub releases](https://github.com/max-niederman/ttyper/releases). If your system is not supported or you have another problem, feel free to open an issue.
-
-### cargo
+### cargo (from GitHub)
 
 ```bash
-cargo install ttyper
+cargo install --git https://github.com/ptrsauer/ttyper.git
 ```
 
-### arch linux
+### from source
 
 ```bash
-pacman -S ttyper
-```
-
-### nix
-
-```bash
-nix-env -iA nixpkgs.ttyper # or nixos.ttyper on NixOS
-```
-
-### scoop
-
-```bash
-scoop install ttyper
+git clone https://github.com/ptrsauer/ttyper.git
+cd ttyper
+cargo install --path .
 ```
 
 ## usage
