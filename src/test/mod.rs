@@ -125,9 +125,17 @@ impl Test {
                 if word.progress.is_empty() && self.backtracking_enabled {
                     self.last_word();
                 } else {
+                    let is_error = if self.case_insensitive {
+                        !word
+                            .text
+                            .to_lowercase()
+                            .starts_with(&word.progress.to_lowercase())
+                    } else {
+                        !word.text.starts_with(&word.progress[..])
+                    };
                     word.events.push(TestEvent {
                         time: Instant::now(),
-                        correct: Some(!word.text.starts_with(&word.progress[..])),
+                        correct: Some(is_error),
                         key,
                         release_time: None,
                     });
@@ -139,9 +147,17 @@ impl Test {
                 if word.progress.is_empty() && self.backtracking_enabled {
                     self.last_word();
                 } else {
+                    let is_error = if self.case_insensitive {
+                        !word
+                            .text
+                            .to_lowercase()
+                            .starts_with(&word.progress.to_lowercase())
+                    } else {
+                        !word.text.starts_with(&word.progress[..])
+                    };
                     word.events.push(TestEvent {
                         time: Instant::now(),
-                        correct: Some(!word.text.starts_with(&word.progress[..])),
+                        correct: Some(is_error),
                         key,
                         release_time: None,
                     });
