@@ -1,3 +1,5 @@
+#[cfg(test)]
+pub mod helpers;
 pub mod results;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -276,6 +278,7 @@ impl Test {
 
 #[cfg(test)]
 mod tests {
+    use super::helpers::*;
     use super::*;
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
@@ -305,7 +308,7 @@ mod tests {
 
     #[test]
     fn ctrl_h_deletes_single_character() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "hel");
         assert_eq!(test.words[0].progress, "hel");
 
@@ -318,14 +321,7 @@ mod tests {
 
     #[test]
     fn ctrl_h_on_empty_word_backtracks() {
-        let mut test = Test::new(
-            vec!["ab".to_string(), "cd".to_string()],
-            true, // backtracking enabled
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = default_test(vec!["ab".to_string(), "cd".to_string()]);
         // Complete word 1, move to word 2
         type_string(&mut test, "ab");
         test.handle_key(press(KeyCode::Char(' ')));
@@ -341,14 +337,7 @@ mod tests {
 
     #[test]
     fn ctrl_h_no_backtrack_when_disabled() {
-        let mut test = Test::new(
-            vec!["ab".to_string(), "cd".to_string()],
-            false, // backtracking disabled
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = no_backtrack_test(vec!["ab".to_string(), "cd".to_string()]);
         type_string(&mut test, "ab");
         test.handle_key(press(KeyCode::Char(' ')));
         assert_eq!(test.current_word, 1);
@@ -363,7 +352,7 @@ mod tests {
 
     #[test]
     fn ctrl_letter_is_ignored() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "he");
         assert_eq!(test.words[0].progress, "he");
 
@@ -384,7 +373,7 @@ mod tests {
 
     #[test]
     fn ctrl_letter_no_event_added() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "he");
         let events_before = test.words[0].events.len();
 
@@ -398,7 +387,7 @@ mod tests {
 
     #[test]
     fn shift_letter_still_types() {
-        let mut test = Test::new(vec!["Hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["Hello".to_string()]);
 
         let shift_h = KeyEvent {
             code: KeyCode::Char('H'),
@@ -415,7 +404,7 @@ mod tests {
 
     #[test]
     fn ctrl_shift_letter_is_ignored() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "he");
 
         let ctrl_shift_a = KeyEvent {
@@ -433,14 +422,7 @@ mod tests {
 
     #[test]
     fn ctrl_space_does_not_advance_word() {
-        let mut test = Test::new(
-            vec!["ab".to_string(), "cd".to_string()],
-            true,
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = default_test(vec!["ab".to_string(), "cd".to_string()]);
         type_string(&mut test, "ab");
         assert_eq!(test.current_word, 0);
 
@@ -454,7 +436,7 @@ mod tests {
 
     #[test]
     fn tab_does_not_affect_progress() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "he");
 
         test.handle_key(press(KeyCode::Tab));
@@ -467,7 +449,7 @@ mod tests {
 
     #[test]
     fn ctrl_w_still_clears_entire_word() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         type_string(&mut test, "hel");
         assert_eq!(test.words[0].progress, "hel");
 
@@ -480,7 +462,7 @@ mod tests {
 
     #[test]
     fn case_insensitive_lowercase_matches_uppercase_word() {
-        let mut test = Test::new(vec!["Hello".to_string()], true, false, true, false, None);
+        let mut test = case_insensitive_test(vec!["Hello".to_string()]);
         type_string(&mut test, "hello");
         assert_eq!(
             test.words[0].progress, "hello",
@@ -496,7 +478,7 @@ mod tests {
 
     #[test]
     fn case_insensitive_uppercase_matches_lowercase_word() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, true, false, None);
+        let mut test = case_insensitive_test(vec!["hello".to_string()]);
         let shift_h = KeyEvent {
             code: KeyCode::Char('H'),
             modifiers: KeyModifiers::SHIFT,
@@ -513,7 +495,7 @@ mod tests {
 
     #[test]
     fn case_insensitive_correct_flag_on_events() {
-        let mut test = Test::new(vec!["World".to_string()], true, false, true, false, None);
+        let mut test = case_insensitive_test(vec!["World".to_string()]);
         type_string(&mut test, "world");
         // All events should be marked correct (case-insensitive comparison)
         assert!(
@@ -524,7 +506,7 @@ mod tests {
 
     #[test]
     fn case_sensitive_uppercase_mismatch() {
-        let mut test = Test::new(vec!["Hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["Hello".to_string()]);
         type_string(&mut test, "hello");
         test.handle_key(press(KeyCode::Char(' ')));
         // In case-sensitive mode, 'hello' != 'Hello', so the word event should be incorrect
@@ -538,7 +520,7 @@ mod tests {
 
     #[test]
     fn case_insensitive_auto_complete_last_word() {
-        let mut test = Test::new(vec!["ABC".to_string()], true, false, true, false, None);
+        let mut test = case_insensitive_test(vec!["ABC".to_string()]);
         type_string(&mut test, "abc");
         assert!(
             test.complete,
@@ -548,7 +530,7 @@ mod tests {
 
     #[test]
     fn no_backspace_blocks_backspace() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, true, None);
+        let mut test = no_backspace_test(vec!["hello".to_string()]);
         type_string(&mut test, "hel");
         assert_eq!(test.words[0].progress, "hel");
 
@@ -561,7 +543,7 @@ mod tests {
 
     #[test]
     fn no_backspace_blocks_ctrl_h() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, true, None);
+        let mut test = no_backspace_test(vec!["hello".to_string()]);
         type_string(&mut test, "hel");
 
         test.handle_key(press_ctrl(KeyCode::Char('h')));
@@ -573,7 +555,7 @@ mod tests {
 
     #[test]
     fn no_backspace_blocks_ctrl_w() {
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, true, None);
+        let mut test = no_backspace_test(vec!["hello".to_string()]);
         type_string(&mut test, "hel");
 
         test.handle_key(press_ctrl(KeyCode::Char('w')));
@@ -585,7 +567,7 @@ mod tests {
 
     #[test]
     fn no_backspace_still_allows_typing() {
-        let mut test = Test::new(vec!["hi".to_string()], true, false, false, true, None);
+        let mut test = no_backspace_test(vec!["hi".to_string()]);
         type_string(&mut test, "hi");
         test.handle_key(press(KeyCode::Char(' ')));
         assert!(
@@ -596,32 +578,24 @@ mod tests {
 
     #[test]
     fn look_ahead_stores_value() {
-        let test = Test::new(
+        let test = look_ahead_test(
             vec!["a".to_string(), "b".to_string(), "c".to_string()],
-            true,
-            false,
-            false,
-            false,
-            Some(2),
+            2,
         );
         assert_eq!(test.look_ahead, Some(2));
     }
 
     #[test]
     fn look_ahead_none_by_default() {
-        let test = Test::new(vec!["a".to_string()], true, false, false, false, None);
+        let test = default_test(vec!["a".to_string()]);
         assert_eq!(test.look_ahead, None);
     }
 
     #[test]
     fn look_ahead_does_not_affect_typing() {
-        let mut test = Test::new(
+        let mut test = look_ahead_test(
             vec!["ab".to_string(), "cd".to_string(), "ef".to_string()],
-            true,
-            false,
-            false,
-            false,
-            Some(1),
+            1,
         );
         type_string(&mut test, "ab");
         test.handle_key(press(KeyCode::Char(' ')));
