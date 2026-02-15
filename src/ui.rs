@@ -1,4 +1,4 @@
-use crate::config::Theme;
+use crate::config::{format_keybinding, Config, Theme};
 
 use super::test::{results, Test, TestWord};
 
@@ -53,29 +53,30 @@ impl<T: UsedWidget> DrawInner<T> for SizedBlock<'_> {
 }
 
 pub trait ThemedWidget {
-    fn render(self, area: Rect, buf: &mut Buffer, theme: &Theme);
+    fn render(self, area: Rect, buf: &mut Buffer, config: &Config);
 }
 
 pub struct Themed<'t, W: ?Sized> {
-    theme: &'t Theme,
+    config: &'t Config,
     widget: W,
 }
 impl<W: ThemedWidget> Widget for Themed<'_, W> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        self.widget.render(area, buf, self.theme)
+        self.widget.render(area, buf, self.config)
     }
 }
-impl Theme {
+impl Config {
     pub fn apply_to<W>(&self, widget: W) -> Themed<'_, W> {
         Themed {
-            theme: self,
+            config: self,
             widget,
         }
     }
 }
 
 impl ThemedWidget for &Test {
-    fn render(self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+    fn render(self, area: Rect, buf: &mut Buffer, config: &Config) {
+        let theme = &config.theme;
         buf.set_style(area, theme.default);
 
         // Chunks
@@ -298,7 +299,9 @@ fn word_parts_to_spans(parts: Vec<(String, Status)>, theme: &Theme) -> Vec<Span<
 }
 
 impl ThemedWidget for &results::Results {
-    fn render(self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+    fn render(self, area: Rect, buf: &mut Buffer, config: &Config) {
+        let theme = &config.theme;
+        let key_map = &config.key_map;
         buf.set_style(area, theme.default);
 
         // Chunks
@@ -323,11 +326,31 @@ impl ThemedWidget for &results::Results {
             )
             .split(res_chunks[0]);
 
+        let q = format_keybinding(&key_map.quit);
+        let r = format_keybinding(&key_map.restart);
+        let t = format_keybinding(&key_map.repeat);
+        let s = format_keybinding(&key_map.practice_slow);
+        let p = format_keybinding(&key_map.practice_missed);
         let msg = match (self.slow_words.is_empty(), self.missed_words.is_empty()) {
-            (true, true) => "Press 'q' to quit, 'r' for new test or 't' to repeat",
-            (false, true) => "Press 'q' to quit, 'r' new, 't' repeat or 's' to practice slow",
-            (true, false) => "Press 'q' to quit, 'r' new, 't' repeat or 'p' to practice missed",
-            (false, false) => "Press 'q' quit, 'r' new, 't' repeat, 's' slow or 'p' missed",
+            (true, true) => format!("Press '{}' quit, '{}' new or '{}' repeat", q, r, t),
+            (false, true) => {
+                format!(
+                    "Press '{}' quit, '{}' new, '{}' repeat or '{}' slow",
+                    q, r, t, s
+                )
+            }
+            (true, false) => {
+                format!(
+                    "Press '{}' quit, '{}' new, '{}' repeat or '{}' missed",
+                    q, r, t, p
+                )
+            }
+            (false, false) => {
+                format!(
+                    "Press '{}' quit, '{}' new, '{}' repeat, '{}' slow or '{}' missed",
+                    q, r, t, s, p
+                )
+            }
         };
 
         let exit = Span::styled(msg, theme.results_restart_prompt);

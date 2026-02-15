@@ -223,7 +223,24 @@ results_chart_y = "gray;italic"
 
 # restart/quit prompt in results ui
 results_restart_prompt = "gray;italic"
+
+[key_map]
+# results screen: quit, new random test, repeat same test
+quit = "q"
+restart = "r"
+repeat = "t"
+# results screen: practice missed/slow words
+practice_missed = "p"
+practice_slow = "s"
+# test screen: start new test with different words
+new_test = "Tab"
 ```
+
+### key binding format
+
+Key bindings are specified as strings. A single character (e.g. `"q"`) maps to that key. Special keys are capitalized: `Tab`, `Space`, `Enter`, `Esc`, `Backspace`, `Delete`.
+
+Modifier keys use a prefix with a dash: `C-` for Ctrl, `A-` for Alt. For example, `"C-r"` means Ctrl+R.
 
 ### style format
 
