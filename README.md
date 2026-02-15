@@ -94,7 +94,7 @@ Options:
       --no-backspace          Disable backspace/delete during test
       --no-shuffle            Don't shuffle word order
       --no-limit              Use entire word list (ignore --words limit)
-      --look-ahead <N>        Show only the next N upcoming words
+      --look-ahead <N>        Show only the next N upcoming words (past and current word always visible)
       --history               Show history of past results
       --last <N>              Show only the last N history entries
       --history-lang <LANG>   Filter history by language
