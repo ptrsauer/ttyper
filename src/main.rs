@@ -286,12 +286,12 @@ impl State {
         match self {
             State::Test(test) => {
                 terminal.draw(|f| {
-                    f.render_widget(config.theme.apply_to(test), f.size());
+                    f.render_widget(config.apply_to(test), f.size());
                 })?;
             }
             State::Results(results) => {
                 terminal.draw(|f| {
-                    f.render_widget(config.theme.apply_to(results), f.size());
+                    f.render_widget(config.apply_to(results), f.size());
                 })?;
             }
         }
@@ -308,6 +308,13 @@ fn main() -> io::Result<()> {
     let config = opt.config();
     if opt.debug {
         dbg!(&config);
+    }
+
+    let conflicts = config.key_map.check_conflicts();
+    if !conflicts.is_empty() {
+        for conflict in &conflicts {
+            eprintln!("Warning: {}", conflict);
+        }
     }
 
     if opt.list_languages {
@@ -453,8 +460,10 @@ fn main() -> io::Result<()> {
         match state {
             State::Test(ref mut test) => {
                 if let Event::Key(key) = event {
-                    // TAB → restart with new words (no save)
-                    if key.code == KeyCode::Tab && key.kind == KeyEventKind::Press {
+                    // new_test binding (default: TAB) → restart with new words (no save)
+                    if key.kind == KeyEventKind::Press
+                        && config.key_map.new_test.matches(key.code, key.modifiers)
+                    {
                         match opt.gen_contents() {
                             Ok(contents) if !contents.is_empty() => {
                                 state = State::Test(Test::new(
@@ -485,99 +494,85 @@ fn main() -> io::Result<()> {
                     }
                 }
             }
-            State::Results(ref result) => match event {
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('r'),
-                    kind: KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => match opt.gen_contents() {
-                    Ok(contents) if !contents.is_empty() => {
+            State::Results(ref result) => {
+                if let Event::Key(key) = event {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    if config.key_map.restart.matches(key.code, key.modifiers) {
+                        match opt.gen_contents() {
+                            Ok(contents) if !contents.is_empty() => {
+                                state = State::Test(Test::new(
+                                    contents,
+                                    !opt.no_backtrack,
+                                    opt.sudden_death,
+                                    opt.case_insensitive,
+                                    opt.no_backspace,
+                                    opt.look_ahead,
+                                ));
+                            }
+                            _ => continue,
+                        }
+                    } else if config
+                        .key_map
+                        .practice_missed
+                        .matches(key.code, key.modifiers)
+                    {
+                        if result.missed_words.is_empty() {
+                            continue;
+                        }
+                        let mut practice_words: Vec<String> = (result.missed_words)
+                            .iter()
+                            .flat_map(|w| vec![w.clone(); 5])
+                            .collect();
+                        practice_words.shuffle(&mut thread_rng());
                         state = State::Test(Test::new(
-                            contents,
+                            practice_words,
                             !opt.no_backtrack,
                             opt.sudden_death,
                             opt.case_insensitive,
                             opt.no_backspace,
                             opt.look_ahead,
                         ));
+                    } else if config.key_map.repeat.matches(key.code, key.modifiers) {
+                        if result.words.is_empty() {
+                            continue;
+                        }
+                        state = State::Test(Test::new(
+                            result.words.clone(),
+                            !opt.no_backtrack,
+                            opt.sudden_death,
+                            opt.case_insensitive,
+                            opt.no_backspace,
+                            opt.look_ahead,
+                        ));
+                    } else if config
+                        .key_map
+                        .practice_slow
+                        .matches(key.code, key.modifiers)
+                    {
+                        if result.slow_words.is_empty() {
+                            continue;
+                        }
+                        let mut practice_words: Vec<String> = result
+                            .slow_words
+                            .iter()
+                            .flat_map(|w| vec![w.clone(); 5])
+                            .collect();
+                        practice_words.shuffle(&mut thread_rng());
+                        state = State::Test(Test::new(
+                            practice_words,
+                            !opt.no_backtrack,
+                            opt.sudden_death,
+                            opt.case_insensitive,
+                            opt.no_backspace,
+                            opt.look_ahead,
+                        ));
+                    } else if config.key_map.quit.matches(key.code, key.modifiers) {
+                        break;
                     }
-                    _ => continue,
-                },
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('p'),
-                    kind: KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => {
-                    if result.missed_words.is_empty() {
-                        continue;
-                    }
-                    // repeat each missed word 5 times
-                    let mut practice_words: Vec<String> = (result.missed_words)
-                        .iter()
-                        .flat_map(|w| vec![w.clone(); 5])
-                        .collect();
-                    practice_words.shuffle(&mut thread_rng());
-                    state = State::Test(Test::new(
-                        practice_words,
-                        !opt.no_backtrack,
-                        opt.sudden_death,
-                        opt.case_insensitive,
-                        opt.no_backspace,
-                        opt.look_ahead,
-                    ));
                 }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('t'),
-                    kind: KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => {
-                    if result.words.is_empty() {
-                        continue;
-                    }
-                    state = State::Test(Test::new(
-                        result.words.clone(),
-                        !opt.no_backtrack,
-                        opt.sudden_death,
-                        opt.case_insensitive,
-                        opt.no_backspace,
-                        opt.look_ahead,
-                    ));
-                }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('s'),
-                    kind: KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => {
-                    if result.slow_words.is_empty() {
-                        continue;
-                    }
-                    let mut practice_words: Vec<String> = result
-                        .slow_words
-                        .iter()
-                        .flat_map(|w| vec![w.clone(); 5])
-                        .collect();
-                    practice_words.shuffle(&mut thread_rng());
-                    state = State::Test(Test::new(
-                        practice_words,
-                        !opt.no_backtrack,
-                        opt.sudden_death,
-                        opt.case_insensitive,
-                        opt.no_backspace,
-                        opt.look_ahead,
-                    ));
-                }
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('q'),
-                    kind: KeyEventKind::Press,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                }) => break,
-                _ => {}
-            },
+            }
         }
 
         state.render_into(&mut terminal, &config)?;

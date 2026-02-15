@@ -1,3 +1,4 @@
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     style::{Color, Modifier, Style},
     widgets::BorderType,
@@ -6,6 +7,7 @@ use serde::{
     de::{self, IntoDeserializer},
     Deserialize,
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
@@ -14,6 +16,7 @@ pub struct Config {
     pub default_language: String,
     pub history_file: Option<PathBuf>,
     pub theme: Theme,
+    pub key_map: KeyMap,
 }
 
 impl Default for Config {
@@ -22,7 +25,173 @@ impl Default for Config {
             default_language: "english200".into(),
             history_file: None,
             theme: Theme::default(),
+            key_map: KeyMap::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyBinding {
+    pub code: KeyCode,
+    pub modifiers: KeyModifiers,
+}
+
+impl KeyBinding {
+    pub fn matches(&self, code: KeyCode, modifiers: KeyModifiers) -> bool {
+        self.code == code && modifiers == self.modifiers
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct KeyMap {
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub quit: KeyBinding,
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub restart: KeyBinding,
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub repeat: KeyBinding,
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub practice_missed: KeyBinding,
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub practice_slow: KeyBinding,
+    #[serde(deserialize_with = "deserialize_keybinding")]
+    pub new_test: KeyBinding,
+}
+
+impl Default for KeyMap {
+    fn default() -> Self {
+        Self {
+            quit: KeyBinding {
+                code: KeyCode::Char('q'),
+                modifiers: KeyModifiers::NONE,
+            },
+            restart: KeyBinding {
+                code: KeyCode::Char('r'),
+                modifiers: KeyModifiers::NONE,
+            },
+            repeat: KeyBinding {
+                code: KeyCode::Char('t'),
+                modifiers: KeyModifiers::NONE,
+            },
+            practice_missed: KeyBinding {
+                code: KeyCode::Char('p'),
+                modifiers: KeyModifiers::NONE,
+            },
+            practice_slow: KeyBinding {
+                code: KeyCode::Char('s'),
+                modifiers: KeyModifiers::NONE,
+            },
+            new_test: KeyBinding {
+                code: KeyCode::Tab,
+                modifiers: KeyModifiers::NONE,
+            },
+        }
+    }
+}
+
+impl KeyMap {
+    pub fn check_conflicts(&self) -> Vec<String> {
+        let bindings: Vec<(&str, &KeyBinding)> = vec![
+            ("quit", &self.quit),
+            ("restart", &self.restart),
+            ("repeat", &self.repeat),
+            ("practice_missed", &self.practice_missed),
+            ("practice_slow", &self.practice_slow),
+            ("new_test", &self.new_test),
+        ];
+
+        let mut seen: HashMap<(KeyCode, KeyModifiers), &str> = HashMap::new();
+        let mut conflicts = Vec::new();
+
+        for (name, binding) in &bindings {
+            let key = (binding.code, binding.modifiers);
+            if let Some(existing) = seen.get(&key) {
+                conflicts.push(format!(
+                    "Key conflict: '{}' and '{}' are both bound to {}",
+                    existing,
+                    name,
+                    format_keybinding(binding)
+                ));
+            } else {
+                seen.insert(key, name);
+            }
+        }
+
+        conflicts
+    }
+}
+
+pub fn format_keybinding(binding: &KeyBinding) -> String {
+    let mut parts = Vec::new();
+    if binding.modifiers.contains(KeyModifiers::CONTROL) {
+        parts.push("C".to_string());
+    }
+    if binding.modifiers.contains(KeyModifiers::ALT) {
+        parts.push("A".to_string());
+    }
+    let key_str = match binding.code {
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::Tab => "Tab".to_string(),
+        KeyCode::Backspace => "Backspace".to_string(),
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Esc => "Esc".to_string(),
+        KeyCode::Delete => "Delete".to_string(),
+        _ => format!("{:?}", binding.code),
+    };
+    parts.push(key_str);
+    parts.join("-")
+}
+
+pub fn parse_keybinding(value: &str) -> Result<KeyBinding, String> {
+    let parts: Vec<&str> = value.split('-').collect();
+    match parts.len() {
+        1 => {
+            let code = parse_key_code(parts[0])?;
+            Ok(KeyBinding {
+                code,
+                modifiers: KeyModifiers::NONE,
+            })
+        }
+        2 => {
+            let modifiers = parse_modifier(parts[0])?;
+            let code = parse_key_code(parts[1])?;
+            Ok(KeyBinding { code, modifiers })
+        }
+        _ => Err(format!(
+            "Invalid keybinding '{}': expected 'key' or 'modifier-key'",
+            value
+        )),
+    }
+}
+
+fn parse_modifier(s: &str) -> Result<KeyModifiers, String> {
+    match s {
+        "C" => Ok(KeyModifiers::CONTROL),
+        "A" => Ok(KeyModifiers::ALT),
+        _ => Err(format!(
+            "Unknown modifier '{}': expected 'C' (Ctrl) or 'A' (Alt)",
+            s
+        )),
+    }
+}
+
+fn parse_key_code(s: &str) -> Result<KeyCode, String> {
+    match s {
+        "Tab" => Ok(KeyCode::Tab),
+        "Backspace" => Ok(KeyCode::Backspace),
+        "Enter" => Ok(KeyCode::Enter),
+        "Esc" => Ok(KeyCode::Esc),
+        "Delete" => Ok(KeyCode::Delete),
+        "Space" => Ok(KeyCode::Char(' ')),
+        s if s.len() == 1 => {
+            let c = s.chars().next().unwrap();
+            Ok(KeyCode::Char(c))
+        }
+        _ => Err(format!(
+            "Unknown key '{}': expected a single character or one of Tab, Backspace, Enter, Esc, Delete, Space",
+            s
+        )),
     }
 }
 
@@ -129,6 +298,14 @@ impl Default for Theme {
                 .add_modifier(Modifier::ITALIC),
         }
     }
+}
+
+fn deserialize_keybinding<'de, D>(deserializer: D) -> Result<KeyBinding, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    parse_keybinding(&s).map_err(de::Error::custom)
 }
 
 fn deserialize_style<'de, D>(deserializer: D) -> Result<Style, D::Error>
@@ -371,5 +548,129 @@ mod tests {
         let config: Config = toml::from_str(toml_str).unwrap();
         assert!(config.history_file.is_none());
         assert_eq!(config.default_language, "german");
+    }
+
+    #[test]
+    fn parse_simple_char_keybinding() {
+        let kb = parse_keybinding("q").unwrap();
+        assert_eq!(kb.code, KeyCode::Char('q'));
+        assert_eq!(kb.modifiers, KeyModifiers::NONE);
+    }
+
+    #[test]
+    fn parse_special_key_keybinding() {
+        let kb = parse_keybinding("Tab").unwrap();
+        assert_eq!(kb.code, KeyCode::Tab);
+        assert_eq!(kb.modifiers, KeyModifiers::NONE);
+
+        let kb = parse_keybinding("Space").unwrap();
+        assert_eq!(kb.code, KeyCode::Char(' '));
+        assert_eq!(kb.modifiers, KeyModifiers::NONE);
+
+        let kb = parse_keybinding("Esc").unwrap();
+        assert_eq!(kb.code, KeyCode::Esc);
+        assert_eq!(kb.modifiers, KeyModifiers::NONE);
+    }
+
+    #[test]
+    fn parse_ctrl_modifier_keybinding() {
+        let kb = parse_keybinding("C-r").unwrap();
+        assert_eq!(kb.code, KeyCode::Char('r'));
+        assert_eq!(kb.modifiers, KeyModifiers::CONTROL);
+    }
+
+    #[test]
+    fn parse_alt_modifier_keybinding() {
+        let kb = parse_keybinding("A-q").unwrap();
+        assert_eq!(kb.code, KeyCode::Char('q'));
+        assert_eq!(kb.modifiers, KeyModifiers::ALT);
+    }
+
+    #[test]
+    fn parse_invalid_keybinding() {
+        assert!(parse_keybinding("X-q").is_err());
+        assert!(parse_keybinding("a-b-c").is_err());
+        assert!(parse_keybinding("InvalidKey").is_err());
+    }
+
+    #[test]
+    fn keybinding_matches_works() {
+        let kb = KeyBinding {
+            code: KeyCode::Char('q'),
+            modifiers: KeyModifiers::NONE,
+        };
+        assert!(kb.matches(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(!kb.matches(KeyCode::Char('r'), KeyModifiers::NONE));
+        assert!(!kb.matches(KeyCode::Char('q'), KeyModifiers::CONTROL));
+
+        let ctrl_r = KeyBinding {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::CONTROL,
+        };
+        assert!(ctrl_r.matches(KeyCode::Char('r'), KeyModifiers::CONTROL));
+        assert!(!ctrl_r.matches(KeyCode::Char('r'), KeyModifiers::NONE));
+    }
+
+    #[test]
+    fn keymap_default_values() {
+        let km = KeyMap::default();
+        assert_eq!(km.quit.code, KeyCode::Char('q'));
+        assert_eq!(km.restart.code, KeyCode::Char('r'));
+        assert_eq!(km.repeat.code, KeyCode::Char('t'));
+        assert_eq!(km.practice_missed.code, KeyCode::Char('p'));
+        assert_eq!(km.practice_slow.code, KeyCode::Char('s'));
+        assert_eq!(km.new_test.code, KeyCode::Tab);
+    }
+
+    #[test]
+    fn keymap_from_toml() {
+        let toml_str = r#"
+[key_map]
+quit = "x"
+restart = "C-r"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.key_map.quit.code, KeyCode::Char('x'));
+        assert_eq!(config.key_map.restart.code, KeyCode::Char('r'));
+        assert_eq!(config.key_map.restart.modifiers, KeyModifiers::CONTROL);
+        // unspecified keys keep defaults
+        assert_eq!(config.key_map.repeat.code, KeyCode::Char('t'));
+    }
+
+    #[test]
+    fn keymap_conflict_detection() {
+        let mut km = KeyMap::default();
+        assert!(km.check_conflicts().is_empty());
+
+        // create a conflict: quit and restart both bound to 'q'
+        km.restart = KeyBinding {
+            code: KeyCode::Char('q'),
+            modifiers: KeyModifiers::NONE,
+        };
+        let conflicts = km.check_conflicts();
+        assert_eq!(conflicts.len(), 1);
+        assert!(conflicts[0].contains("quit"));
+        assert!(conflicts[0].contains("restart"));
+    }
+
+    #[test]
+    fn format_keybinding_display() {
+        let kb = KeyBinding {
+            code: KeyCode::Char('q'),
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(format_keybinding(&kb), "q");
+
+        let kb = KeyBinding {
+            code: KeyCode::Char('r'),
+            modifiers: KeyModifiers::CONTROL,
+        };
+        assert_eq!(format_keybinding(&kb), "C-r");
+
+        let kb = KeyBinding {
+            code: KeyCode::Tab,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(format_keybinding(&kb), "Tab");
     }
 }
