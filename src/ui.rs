@@ -100,7 +100,8 @@ impl ThemedWidget for &Test {
         input.render(buf);
 
         let target_lines: Vec<Line> = {
-            let words = words_to_spans(&self.words, self.current_word, theme);
+            let words =
+                words_to_spans(&self.words, self.current_word, theme, self.case_insensitive);
 
             let mut lines: Vec<Line> = Vec::new();
             let mut current_line: Vec<Span> = Vec::new();
@@ -137,15 +138,16 @@ fn words_to_spans<'a>(
     words: &'a [TestWord],
     current_word: usize,
     theme: &'a Theme,
+    case_insensitive: bool,
 ) -> Vec<Vec<Span<'a>>> {
     let mut spans = Vec::new();
 
     for word in &words[..current_word] {
-        let parts = split_typed_word(word);
+        let parts = split_typed_word(word, case_insensitive);
         spans.push(word_parts_to_spans(parts, theme));
     }
 
-    let parts_current = split_current_word(&words[current_word]);
+    let parts_current = split_current_word(&words[current_word], case_insensitive);
     spans.push(word_parts_to_spans(parts_current, theme));
 
     for word in &words[current_word + 1..] {
@@ -167,7 +169,7 @@ enum Status {
     Overtyped,
 }
 
-fn split_current_word(word: &TestWord) -> Vec<(String, Status)> {
+fn split_current_word(word: &TestWord, case_insensitive: bool) -> Vec<(String, Status)> {
     let mut parts = Vec::new();
     let mut cur_string = String::new();
     let mut cur_status = Status::Untyped;
@@ -177,10 +179,18 @@ fn split_current_word(word: &TestWord) -> Vec<(String, Status)> {
         let p = progress.next();
         let status = match p {
             None => Status::CurrentUntyped,
-            Some(c) => match c {
-                c if c == tc => Status::CurrentCorrect,
-                _ => Status::CurrentIncorrect,
-            },
+            Some(c) => {
+                let matches = if case_insensitive {
+                    c.to_lowercase().eq(tc.to_lowercase())
+                } else {
+                    c == tc
+                };
+                if matches {
+                    Status::CurrentCorrect
+                } else {
+                    Status::CurrentIncorrect
+                }
+            }
         };
 
         if status == cur_status {
@@ -210,7 +220,7 @@ fn split_current_word(word: &TestWord) -> Vec<(String, Status)> {
     parts
 }
 
-fn split_typed_word(word: &TestWord) -> Vec<(String, Status)> {
+fn split_typed_word(word: &TestWord, case_insensitive: bool) -> Vec<(String, Status)> {
     let mut parts = Vec::new();
     let mut cur_string = String::new();
     let mut cur_status = Status::Untyped;
@@ -220,10 +230,18 @@ fn split_typed_word(word: &TestWord) -> Vec<(String, Status)> {
         let p = progress.next();
         let status = match p {
             None => Status::Untyped,
-            Some(c) => match c {
-                c if c == tc => Status::Correct,
-                _ => Status::Incorrect,
-            },
+            Some(c) => {
+                let matches = if case_insensitive {
+                    c.to_lowercase().eq(tc.to_lowercase())
+                } else {
+                    c == tc
+                };
+                if matches {
+                    Status::Correct
+                } else {
+                    Status::Incorrect
+                }
+            }
         };
 
         if status == cur_status {
@@ -525,7 +543,7 @@ mod tests {
 
             for case in cases {
                 let (word, expected) = setup(case);
-                let got = split_typed_word(&word);
+                let got = split_typed_word(&word, false);
                 assert_eq!(got, expected);
             }
         }
@@ -562,7 +580,7 @@ mod tests {
 
             for case in cases {
                 let (word, expected) = setup(case);
-                let got = split_current_word(&word);
+                let got = split_current_word(&word, false);
                 assert_eq!(got, expected);
             }
         }

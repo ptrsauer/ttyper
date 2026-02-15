@@ -69,6 +69,10 @@ struct Opt {
     #[arg(long)]
     sudden_death: bool,
 
+    /// Ignore case when comparing typed input
+    #[arg(long)]
+    case_insensitive: bool,
+
     /// Show history of past results
     #[arg(long)]
     history: bool,
@@ -378,7 +382,12 @@ fn main() -> io::Result<()> {
     );
     terminal.clear()?;
 
-    let mut state = State::Test(Test::new(contents, !opt.no_backtrack, opt.sudden_death));
+    let mut state = State::Test(Test::new(
+        contents,
+        !opt.no_backtrack,
+        opt.sudden_death,
+        opt.case_insensitive,
+    ));
 
     state.render_into(&mut terminal, &config)?;
     loop {
@@ -426,6 +435,7 @@ fn main() -> io::Result<()> {
                                     contents,
                                     !opt.no_backtrack,
                                     opt.sudden_death,
+                                    opt.case_insensitive,
                                 ));
                             }
                             _ => continue,
@@ -455,8 +465,12 @@ fn main() -> io::Result<()> {
                     ..
                 }) => match opt.gen_contents() {
                     Ok(contents) if !contents.is_empty() => {
-                        state =
-                            State::Test(Test::new(contents, !opt.no_backtrack, opt.sudden_death));
+                        state = State::Test(Test::new(
+                            contents,
+                            !opt.no_backtrack,
+                            opt.sudden_death,
+                            opt.case_insensitive,
+                        ));
                     }
                     _ => continue,
                 },
@@ -479,6 +493,7 @@ fn main() -> io::Result<()> {
                         practice_words,
                         !opt.no_backtrack,
                         opt.sudden_death,
+                        opt.case_insensitive,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -494,6 +509,7 @@ fn main() -> io::Result<()> {
                         result.words.clone(),
                         !opt.no_backtrack,
                         opt.sudden_death,
+                        opt.case_insensitive,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -515,6 +531,7 @@ fn main() -> io::Result<()> {
                         practice_words,
                         !opt.no_backtrack,
                         opt.sudden_death,
+                        opt.case_insensitive,
                     ));
                 }
                 Event::Key(KeyEvent {
