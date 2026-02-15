@@ -85,6 +85,10 @@ struct Opt {
     #[arg(long)]
     no_limit: bool,
 
+    /// Show only the next N upcoming words (past and current word always visible)
+    #[arg(long, value_name = "N")]
+    look_ahead: Option<usize>,
+
     /// Show history of past results
     #[arg(long)]
     history: bool,
@@ -408,6 +412,7 @@ fn main() -> io::Result<()> {
         opt.sudden_death,
         opt.case_insensitive,
         opt.no_backspace,
+        opt.look_ahead,
     ));
 
     state.render_into(&mut terminal, &config)?;
@@ -458,6 +463,7 @@ fn main() -> io::Result<()> {
                                     opt.sudden_death,
                                     opt.case_insensitive,
                                     opt.no_backspace,
+                                    opt.look_ahead,
                                 ));
                             }
                             _ => continue,
@@ -493,6 +499,7 @@ fn main() -> io::Result<()> {
                             opt.sudden_death,
                             opt.case_insensitive,
                             opt.no_backspace,
+                            opt.look_ahead,
                         ));
                     }
                     _ => continue,
@@ -518,6 +525,7 @@ fn main() -> io::Result<()> {
                         opt.sudden_death,
                         opt.case_insensitive,
                         opt.no_backspace,
+                        opt.look_ahead,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -535,6 +543,7 @@ fn main() -> io::Result<()> {
                         opt.sudden_death,
                         opt.case_insensitive,
                         opt.no_backspace,
+                        opt.look_ahead,
                     ));
                 }
                 Event::Key(KeyEvent {
@@ -558,6 +567,7 @@ fn main() -> io::Result<()> {
                         opt.sudden_death,
                         opt.case_insensitive,
                         opt.no_backspace,
+                        opt.look_ahead,
                     ));
                 }
                 Event::Key(KeyEvent {

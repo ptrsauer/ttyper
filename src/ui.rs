@@ -100,8 +100,13 @@ impl ThemedWidget for &Test {
         input.render(buf);
 
         let target_lines: Vec<Line> = {
-            let words =
-                words_to_spans(&self.words, self.current_word, theme, self.case_insensitive);
+            let words = words_to_spans(
+                &self.words,
+                self.current_word,
+                theme,
+                self.case_insensitive,
+                self.look_ahead,
+            );
 
             let mut lines: Vec<Line> = Vec::new();
             let mut current_line: Vec<Span> = Vec::new();
@@ -139,6 +144,7 @@ fn words_to_spans<'a>(
     current_word: usize,
     theme: &'a Theme,
     case_insensitive: bool,
+    look_ahead: Option<usize>,
 ) -> Vec<Vec<Span<'a>>> {
     let mut spans = Vec::new();
 
@@ -150,7 +156,12 @@ fn words_to_spans<'a>(
     let parts_current = split_current_word(&words[current_word], case_insensitive);
     spans.push(word_parts_to_spans(parts_current, theme));
 
-    for word in &words[current_word + 1..] {
+    let visible_end = match look_ahead {
+        Some(n) => (current_word + 1 + n).min(words.len()),
+        None => words.len(),
+    };
+
+    for word in &words[current_word + 1..visible_end] {
         let parts = vec![(word.text.clone(), Status::Untyped)];
         spans.push(word_parts_to_spans(parts, theme));
     }
@@ -546,6 +557,107 @@ mod tests {
                 let got = split_typed_word(&word, false);
                 assert_eq!(got, expected);
             }
+        }
+
+        #[test]
+        fn words_to_spans_no_look_ahead_shows_all() {
+            let theme = Theme::default();
+            let words: Vec<TestWord> = vec!["a", "b", "c", "d", "e"]
+                .into_iter()
+                .map(TestWord::from)
+                .collect();
+            let spans = words_to_spans(&words, 0, &theme, false, None);
+            assert_eq!(
+                spans.len(),
+                5,
+                "Without look_ahead, all 5 words should be visible"
+            );
+        }
+
+        #[test]
+        fn words_to_spans_look_ahead_limits_visibility() {
+            let theme = Theme::default();
+            let words: Vec<TestWord> = vec!["a", "b", "c", "d", "e"]
+                .into_iter()
+                .map(TestWord::from)
+                .collect();
+            // current_word=0, look_ahead=2: should show word 0 (current) + 2 upcoming = 3 total
+            let spans = words_to_spans(&words, 0, &theme, false, Some(2));
+            assert_eq!(
+                spans.len(),
+                3,
+                "With look_ahead=2, should show current + 2 upcoming words"
+            );
+        }
+
+        #[test]
+        fn words_to_spans_look_ahead_one() {
+            let theme = Theme::default();
+            let words: Vec<TestWord> = vec!["a", "b", "c", "d"]
+                .into_iter()
+                .map(TestWord::from)
+                .collect();
+            // current_word=1, look_ahead=1: words[0] (typed) + word[1] (current) + word[2] (next) = 3
+            let mut word0 = TestWord::from("a");
+            word0.progress = "a".to_string();
+            let words = vec![
+                word0,
+                TestWord::from("b"),
+                TestWord::from("c"),
+                TestWord::from("d"),
+            ];
+            let spans = words_to_spans(&words, 1, &theme, false, Some(1));
+            assert_eq!(
+                spans.len(),
+                3,
+                "With look_ahead=1 at word 1: past(1) + current(1) + upcoming(1) = 3"
+            );
+        }
+
+        #[test]
+        fn words_to_spans_look_ahead_clamps_to_end() {
+            let theme = Theme::default();
+            let words: Vec<TestWord> = vec!["a", "b"].into_iter().map(TestWord::from).collect();
+            // current_word=0, look_ahead=10: only 1 upcoming word exists
+            let spans = words_to_spans(&words, 0, &theme, false, Some(10));
+            assert_eq!(
+                spans.len(),
+                2,
+                "Look ahead larger than remaining words should clamp to end"
+            );
+        }
+
+        #[test]
+        fn words_to_spans_look_ahead_zero_shows_only_current() {
+            let theme = Theme::default();
+            let words: Vec<TestWord> = vec!["a", "b", "c", "d"]
+                .into_iter()
+                .map(TestWord::from)
+                .collect();
+            // look_ahead=0: show only the current word, no upcoming words
+            let spans = words_to_spans(&words, 0, &theme, false, Some(0));
+            assert_eq!(
+                spans.len(),
+                1,
+                "With look_ahead=0, only the current word should be visible"
+            );
+        }
+
+        #[test]
+        fn words_to_spans_look_ahead_at_last_word() {
+            let theme = Theme::default();
+            let mut word0 = TestWord::from("a");
+            word0.progress = "a".to_string();
+            let mut word1 = TestWord::from("b");
+            word1.progress = "b".to_string();
+            let words = vec![word0, word1, TestWord::from("c")];
+            // current_word=2 (last word), look_ahead=5: no upcoming words to show
+            let spans = words_to_spans(&words, 2, &theme, false, Some(5));
+            assert_eq!(
+                spans.len(),
+                3,
+                "At last word: past(2) + current(1) + no upcoming = 3"
+            );
         }
 
         #[test]
