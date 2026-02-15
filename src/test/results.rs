@@ -247,6 +247,7 @@ fn calc_dwell(events: &[&super::TestEvent]) -> DwellData {
 
 #[cfg(test)]
 mod tests {
+    use super::super::helpers::default_test;
     use super::*;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::time::Instant;
@@ -266,7 +267,7 @@ mod tests {
 
     #[test]
     fn non_target_key_excluded_from_per_key() {
-        let mut test = Test::new(vec!["abc".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["abc".to_string()]);
         test.words[0].events.push(make_event('a', true));
         test.words[0].events.push(make_event('x', false)); // 'x' not in "abc"
         test.words[0].events.push(make_event('b', true));
@@ -288,7 +289,7 @@ mod tests {
 
     #[test]
     fn non_target_key_still_counted_in_overall() {
-        let mut test = Test::new(vec!["ab".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["ab".to_string()]);
         test.words[0].events.push(make_event('a', true));
         test.words[0].events.push(make_event('x', false)); // wrong key, not in target
         test.words[0].events.push(make_event('b', true));
@@ -302,7 +303,7 @@ mod tests {
 
     #[test]
     fn target_key_with_errors_tracked_correctly() {
-        let mut test = Test::new(vec!["aa".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["aa".to_string()]);
         test.words[0].events.push(make_event('a', true));
         test.words[0].events.push(make_event('a', false)); // 'a' is in target but typed wrong position
 
@@ -316,7 +317,7 @@ mod tests {
     #[test]
     fn shift_variant_of_target_key_tracked() {
         // Target has lowercase 'e', user types uppercase 'E' (Shift mistake)
-        let mut test = Test::new(vec!["hello".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["hello".to_string()]);
         test.words[0].events.push(make_event('h', true));
         test.words[0].events.push(make_event('E', false)); // Shift-variant of 'e'
         test.words[0].events.push(make_event('l', true));
@@ -332,7 +333,7 @@ mod tests {
 
     #[test]
     fn multiple_non_target_keys_all_excluded() {
-        let mut test = Test::new(vec!["a".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["a".to_string()]);
         test.words[0].events.push(make_event('a', true));
         test.words[0].events.push(make_event('x', false));
         test.words[0].events.push(make_event('y', false));
@@ -376,14 +377,11 @@ mod tests {
     #[test]
     fn slow_words_identifies_slowest() {
         let now = Instant::now();
-        let mut test = Test::new(
-            vec!["fast".to_string(), "slow".to_string(), "mid".to_string()],
-            true,
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = default_test(vec![
+            "fast".to_string(),
+            "slow".to_string(),
+            "mid".to_string(),
+        ]);
 
         // "fast" — 4 chars in 0.4s = 0.1s/char
         for (i, c) in "fast".chars().enumerate() {
@@ -421,14 +419,7 @@ mod tests {
     #[test]
     fn slow_words_excludes_missed() {
         let now = Instant::now();
-        let mut test = Test::new(
-            vec!["correct".to_string(), "wrong".to_string()],
-            true,
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = default_test(vec!["correct".to_string(), "wrong".to_string()]);
 
         // "correct" — typed correctly
         for (i, c) in "correct".chars().enumerate() {
@@ -459,14 +450,7 @@ mod tests {
     #[test]
     fn slow_words_skips_single_event_words() {
         let now = Instant::now();
-        let mut test = Test::new(
-            vec!["a".to_string(), "hello".to_string()],
-            true,
-            false,
-            false,
-            false,
-            None,
-        );
+        let mut test = default_test(vec!["a".to_string(), "hello".to_string()]);
 
         // "a" — only 1 event (can't measure timing)
         test.words[0].events.push(make_timed_event('a', true, now));
@@ -489,7 +473,7 @@ mod tests {
     fn slow_words_caps_at_five() {
         let now = Instant::now();
         let words: Vec<String> = (0..10).map(|i| format!("word{}", i)).collect();
-        let mut test = Test::new(words, true, false, false, false, None);
+        let mut test = default_test(words);
 
         for (wi, word) in test.words.iter_mut().enumerate() {
             for (ci, c) in word.text.clone().chars().enumerate() {
@@ -508,7 +492,7 @@ mod tests {
     #[test]
     fn results_preserve_word_list() {
         let words = vec!["hello".to_string(), "world".to_string(), "test".to_string()];
-        let test = Test::new(words.clone(), true, false, false, false, None);
+        let test = default_test(words.clone());
 
         let results = Results::from(&test);
 
@@ -525,7 +509,7 @@ mod tests {
             "apple".to_string(),
             "mango".to_string(),
         ];
-        let test = Test::new(words.clone(), true, false, false, false, None);
+        let test = default_test(words.clone());
 
         let results = Results::from(&test);
 
@@ -541,7 +525,7 @@ mod tests {
 
     #[test]
     fn dwell_no_release_events() {
-        let mut test = Test::new(vec!["abc".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["abc".to_string()]);
         test.words[0].events.push(make_event('a', true));
         test.words[0].events.push(make_event('b', true));
         test.words[0].events.push(make_event('c', true));
@@ -558,7 +542,7 @@ mod tests {
     #[test]
     fn dwell_with_release_events() {
         let now = Instant::now();
-        let mut test = Test::new(vec!["ab".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["ab".to_string()]);
 
         // 'a' held for 80ms, 'b' held for 120ms
         test.words[0].events.push(make_dwell_event(
@@ -587,7 +571,7 @@ mod tests {
     #[test]
     fn dwell_mixed_events() {
         let now = Instant::now();
-        let mut test = Test::new(vec!["abc".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["abc".to_string()]);
 
         // 'a' has release (100ms), 'b' does not, 'c' has release (50ms)
         test.words[0].events.push(make_dwell_event(
@@ -620,7 +604,7 @@ mod tests {
     #[test]
     fn dwell_per_key_averages() {
         let now = Instant::now();
-        let mut test = Test::new(vec!["aa".to_string()], true, false, false, false, None);
+        let mut test = default_test(vec!["aa".to_string()]);
 
         // Two presses of 'a': 60ms and 100ms → avg 80ms
         test.words[0].events.push(make_dwell_event(
