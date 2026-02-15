@@ -41,11 +41,7 @@ ttyper --no-save
 
 ## Upstream
 
-The original project by [Max Niederman](https://github.com/max-niederman) can be found at [max-niederman/ttyper](https://github.com/max-niederman/ttyper). This fork aims to contribute fixes back upstream where possible.
-
-## Chat
-
-If you're interested in the original ttyper project, you can join [the development Discord server](https://discord.gg/3wJyrBsKXu).
+The original project by [Max Niederman](https://github.com/max-niederman) can be found at [max-niederman/ttyper](https://github.com/max-niederman/ttyper).
 
 ## installation
 
@@ -82,28 +78,30 @@ scoop install ttyper
 For usage instructions, you can run `ttyper --help`:
 
 ```
-ttyper 1.5.0
 Terminal-based typing test.
 
-USAGE:
-    ttyper [FLAGS] [OPTIONS] [contents]
+Usage: ttyper [OPTIONS] [PATH]
 
-FLAGS:
-    -d, --debug             
-    -h, --help              Prints help information
-        --list-languages    List installed languages
-        --no-backtrack      Disable backtracking to completed words
-        --sudden-death      Enable sudden death mode to restart on first error
-    -V, --version           Prints version information
+Arguments:
+  [PATH]  Read test contents from the specified file, or "-" for stdin
 
-OPTIONS:
-    -c, --config <config>                  Use config file
-    -l, --language <language>              Specify test language
-        --language-file <language-file>    Specify test language in file
-    -w, --words <words>                    Specify word count [default: 50]
-
-ARGS:
-    <contents>
+Options:
+  -w, --words <N>             Specify word count [default: 50]
+  -c, --config <PATH>         Use config file
+      --language-file <PATH>  Specify test language in file
+  -l, --language <LANG>       Specify test language
+      --list-languages        List installed languages
+      --no-backtrack          Disable backtracking to completed words
+      --sudden-death          Enable sudden death mode to restart on first error
+      --history               Show history of past results
+      --last <N>              Show only the last N history entries
+      --history-lang <LANG>   Filter history by language
+      --since <DATE>          Filter history from date (YYYY-MM-DD)
+      --until <DATE>          Filter history until date (YYYY-MM-DD)
+      --stats                 Show aggregated statistics
+      --no-save               Disable saving results to history
+  -h, --help                  Print help
+  -V, --version               Print version
 ```
 
 ### examples
